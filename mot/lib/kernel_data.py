@@ -162,6 +162,14 @@ class KernelData:
         """
         raise NotImplementedError()
 
+    def finalize(self):
+        """Finalize the processing.
+
+        This is called after every kernel execution. It allows the kernel data elements to post-process the data
+        structures.
+        """
+        raise NotImplementedError()
+
 
 class Struct(KernelData):
 
@@ -284,6 +292,10 @@ class Struct(KernelData):
     def get_nmr_kernel_inputs(self):
         return sum(element.get_nmr_kernel_inputs() for element in self._elements.values())
 
+    def finalize(self):
+        for d in self._elements.values():
+            d.finalize()
+
     def __getitem__(self, key):
         return self._elements[key]
 
@@ -368,6 +380,9 @@ class Scalar(KernelData):
             assignment = str(np.squeeze(self._value))
         return assignment
 
+    def finalize(self):
+        pass
+
 
 class PrivateMemory(KernelData):
 
@@ -422,6 +437,9 @@ class PrivateMemory(KernelData):
     def get_nmr_kernel_inputs(self):
         return 0
 
+    def finalize(self):
+        pass
+
 
 class LocalMemory(KernelData):
 
@@ -468,13 +486,13 @@ class LocalMemory(KernelData):
         return kernel_param_name
 
     def get_struct_declaration(self, name):
-        return '{}* restrict {};'.format(self._ctype, name)
+        return 'local {}* restrict {};'.format(self._ctype, name)
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
         return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
 
     def get_kernel_parameters(self, kernel_param_name):
-        return ['{}* restrict {}'.format(self._ctype, kernel_param_name)]
+        return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
         itemsize = np.dtype(ctype_to_dtype(self._ctype, dtype_to_ctype(self._mot_float_dtype))).itemsize
@@ -483,22 +501,22 @@ class LocalMemory(KernelData):
     def get_nmr_kernel_inputs(self):
         return 1
 
+    def finalize(self):
+        pass
+
 
 class Array(KernelData):
 
-    def __init__(self, data, ctype=None, mode='r', offset_str=None, ensure_zero_copy=False, as_scalar=False):
+    def __init__(self, data, ctype=None, mode='r', offset_str=None, warn_extra_copy=False, as_scalar=False):
         """Loads the given array as a buffer into the kernel.
 
         By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
         with the problem id by the kernel. For example, if a (n, m) matrix is provided, this will offset the data
         by ``{problem_id} * m``.
 
-        This class will adapt the data to match the ctype (if necessary) and it might copy the data as a consecutive
-        array for direct memory access by the CL environment. Depending on those transformations, a copy of the original
-        array may be made. As such, if ``is_writable`` would have been set, the return values might be written to
-        a different array. To retrieve the output data after kernel execution, use the method :meth:`get_data`.
-        Alternatively, set ``ensure_zero_copy`` to True, this ensures that the return values are written to the
-        same reference by raising a ValueError if the data has to be copied to be used in the kernel.
+        This class guarantees inplace data writing. That is, if data is written from the kernel this class ensures
+        that after kernel execution the latest data is present in the provided array. This might involve a data copy.
+        For warnings about potential data copies, set ``warn_extra_copy`` to True.
 
         Args:
             data (ndarray): the data to load in the kernel
@@ -508,7 +526,7 @@ class Array(KernelData):
                 mode of how the data is loaded into the compute device's memory.
             offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
                 for no offset.
-            ensure_zero_copy (boolean): only used if ``is_writable`` is set to True. If set, we guarantee that the
+            warn_extra_copy (boolean): only used if ``is_writable`` is set to True. If set, we guarantee that the
                 return values are written to the same input array. This allows the user of this class to user their
                 reference to the underlying data, relieving the user of having to use :meth:`get_data`.
             as_scalar (boolean): if given and if the data is only a 1d, we will load the value as a scalar in the
@@ -529,7 +547,8 @@ class Array(KernelData):
         self._ctype = ctype or dtype_to_ctype(self._data.dtype)
         self._mot_float_dtype = None
         self._backup_data_reference = None
-        self._ensure_zero_copy = ensure_zero_copy
+        self._warn_extra_copy = warn_extra_copy
+        self._data_copied = False
         self._as_scalar = as_scalar
 
         self._data_length = 1
@@ -541,7 +560,7 @@ class Array(KernelData):
         if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
             raise ValueError('The option "as_scalar" was set, but the data has more than one dimensions.')
 
-        if self._is_writable and self._ensure_zero_copy and self._data is not data:
+        if self._is_writable and self._warn_extra_copy and self._data is not data:
             raise ValueError('Zero copy was set but we had to make '
                              'a copy to guarantee the writing and ctype requirements.')
 
@@ -561,7 +580,9 @@ class Array(KernelData):
                 self._backup_data_reference = self._data
                 self._data = new_data
 
-                if self._is_writable and self._ensure_zero_copy:
+                self._data_copied = True
+
+                if self._is_writable and self._warn_extra_copy:
                     raise ValueError('We had to make a copy of the data while zero copy was set to True.')
 
         # data length may change when an CL vector type is converted from (n, 3) shape to (n,)
@@ -601,13 +622,13 @@ class Array(KernelData):
     def get_struct_declaration(self, name):
         if self._as_scalar:
             return '{} {};'.format(self._ctype, name)
-        return '{}* restrict {};'.format(self._ctype, name)
+        return 'global {}* restrict {};'.format(self._ctype, name)
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
         return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
 
     def get_kernel_parameters(self, kernel_param_name):
-        return ['{}* restrict {}'.format(self._ctype, kernel_param_name)]
+        return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
     def get_kernel_inputs(self, cl_context, workgroup_size):
         if self._is_writable:
@@ -629,6 +650,10 @@ class Array(KernelData):
         else:
             offset_str = str(self._offset_str)
         return offset_str.replace('{problem_id}', problem_id_substitute)
+
+    def finalize(self):
+        if self._data_copied and self._is_writable:
+            self._backup_data_reference[:] = self._data
 
 
 class Zeros(Array):
@@ -737,3 +762,6 @@ class CompositeArray(KernelData):
     def get_nmr_kernel_inputs(self):
         return self._composite_array.get_nmr_kernel_inputs() + \
                sum(element.get_nmr_kernel_inputs() for element in self._elements)
+
+    def finalize(self):
+        pass

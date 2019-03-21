@@ -626,6 +626,9 @@ def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reducti
     for batch_start, batch_end in split_in_batches(nmr_instances, 1e4 * len(workers)):
         total_offset = enqueue_batch(batch_end - batch_start, total_offset)
 
+    for data in kernel_data.values():
+        data.finalize()
+
     if cl_function.get_return_type() != 'void':
         return kernel_data['_results'].get_data()
 
