@@ -623,63 +623,63 @@ class Array(KernelData):
         return ''
 
     def initialize_variable(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        if not self._as_scalar:
-            if address_space == 'private':
-                return '''
-                    private {ctype} {v_name}[{nmr_elements}];
-
-                    for(uint i = 0; i < {nmr_elements}; i++){{
-                        {v_name}[i] = {k_name}[{offset} + i];
-                    }}
-                '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
-                           nmr_elements=self._data_length,
-                           offset=self._get_offset_str(problem_id_substitute))
-            elif address_space == 'local':
-                return '''
-                    local {ctype} {v_name}[{nmr_elements}];
-
-                    if(get_local_id(0) == 0){{
-                        for(uint i = 0; i < {nmr_elements}; i++){{
-                            {v_name}[i] = {k_name}[{offset} + i];
-                        }}
-                    }}
-                    barrier(CLK_LOCAL_MEM_FENCE);
-                '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
-                           nmr_elements=self._data_length,
-                           offset=self._get_offset_str(problem_id_substitute))
+        # if not self._as_scalar:
+        #     if address_space == 'private':
+        #         return '''
+        #             private {ctype} {v_name}[{nmr_elements}];
+        #
+        #             for(uint i = 0; i < {nmr_elements}; i++){{
+        #                 {v_name}[i] = {k_name}[{offset} + i];
+        #             }}
+        #         '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
+        #                    nmr_elements=self._data_length,
+        #                    offset=self._get_offset_str(problem_id_substitute))
+        #     elif address_space == 'local':
+        #         return '''
+        #             local {ctype} {v_name}[{nmr_elements}];
+        #
+        #             if(get_local_id(0) == 0){{
+        #                 for(uint i = 0; i < {nmr_elements}; i++){{
+        #                     {v_name}[i] = {k_name}[{offset} + i];
+        #                 }}
+        #             }}
+        #             barrier(CLK_LOCAL_MEM_FENCE);
+        #         '''.format(ctype=self._ctype, v_name=variable_name, k_name=kernel_param_name,
+        #                    nmr_elements=self._data_length,
+        #                    offset=self._get_offset_str(problem_id_substitute))
         return ''
 
     def get_function_call_input(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
         if self._as_scalar:
             return '{}[{}]'.format(kernel_param_name, self._get_offset_str(problem_id_substitute))
         else:
-            if address_space == 'global':
-                return '{} + {}'.format(kernel_param_name, self._get_offset_str(problem_id_substitute))
-            elif address_space == 'private':
-                return variable_name
-            elif address_space == 'local':
-                return variable_name
+            # if address_space == 'global':
+            return '{} + {}'.format(kernel_param_name, self._get_offset_str(problem_id_substitute))
+            # elif address_space == 'private':
+            #     return variable_name
+            # elif address_space == 'local':
+            #     return variable_name
 
     def post_function_callback(self, variable_name, kernel_param_name, problem_id_substitute, address_space):
-        if self._is_writable:
-            if not self._as_scalar:
-                if address_space == 'private':
-                    return '''
-                        for(uint i = 0; i < {nmr_elements}; i++){{
-                            {k_name}[{offset} + i] = {v_name}[i];
-                        }}
-                    '''.format(v_name=variable_name, k_name=kernel_param_name,
-                               nmr_elements=self._data_length, offset=self._get_offset_str(problem_id_substitute))
-                elif address_space == 'local':
-                    return '''
-                        if(get_local_id(0) == 0){{
-                            for(uint i = 0; i < {nmr_elements}; i++){{
-                                {k_name}[{offset} + i] = {v_name}[i];
-                            }}
-                        }}
-                    '''.format(v_name=variable_name, k_name=kernel_param_name,
-                               nmr_elements=self._data_length,
-                               offset=self._get_offset_str(problem_id_substitute))
+        # if self._is_writable:
+        #     if not self._as_scalar:
+                # if address_space == 'private':
+                #     return '''
+                #         for(uint i = 0; i < {nmr_elements}; i++){{
+                #             {k_name}[{offset} + i] = {v_name}[i];
+                #         }}
+                #     '''.format(v_name=variable_name, k_name=kernel_param_name,
+                #                nmr_elements=self._data_length, offset=self._get_offset_str(problem_id_substitute))
+                # elif address_space == 'local':
+                #     return '''
+                #         if(get_local_id(0) == 0){{
+                #             for(uint i = 0; i < {nmr_elements}; i++){{
+                #                 {k_name}[{offset} + i] = {v_name}[i];
+                #             }}
+                #         }}
+                #     '''.format(v_name=variable_name, k_name=kernel_param_name,
+                #                nmr_elements=self._data_length,
+                #                offset=self._get_offset_str(problem_id_substitute))
         return ''
 
     def get_struct_declaration(self, name):

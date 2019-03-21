@@ -57,7 +57,7 @@
 #define USER_TOL_X  30*MOT_EPSILON              /** the precision we break at*/
 
 /** The evaluation function we are expecting. */
-double %(FUNCTION_NAME)s(local mot_float_type* x, void* data_void);
+double %(FUNCTION_NAME)s(mot_float_type* x, void* data_void);
 
 /*
  * Create the initial simplex.
@@ -65,9 +65,9 @@ double %(FUNCTION_NAME)s(local mot_float_type* x, void* data_void);
  */
 void _libnms_initialize_simplex(
         int nmr_parameters,
-        local mot_float_type* vertices, // [n+1,n]
-        local mot_float_type* const model_parameters, // [n]
-        local mot_float_type* const initial_simplex_scale // [n]
+        mot_float_type* vertices, // [n+1,n]
+        mot_float_type* const model_parameters, // [n]
+        mot_float_type* const initial_simplex_scale // [n]
 ){
     int i, j;
 
@@ -102,8 +102,8 @@ void _libnms_initialize_simplex(
 /* find the initial function values */
 void _libnms_initialize_function_values(
         int nmr_parameters,
-        local mot_float_type* vertices, // [n+1,n],
-        local mot_float_type* func_vals, // [n+1]
+        mot_float_type* vertices, // [n+1,n],
+        mot_float_type* func_vals, // [n+1]
         void* data){
 
 	for (int j=0; j < nmr_parameters + 1; j++) {
@@ -115,7 +115,7 @@ void _libnms_initialize_function_values(
 /* find the index of the largest and smallest value */
 void _libnms_find_worst_best_fvals(
         int nmr_parameters,
-        local mot_float_type* func_vals, // [n+1]
+        mot_float_type* func_vals, // [n+1]
         int* ind_worst, int* ind_best){
     int i;
 
@@ -139,7 +139,7 @@ void _libnms_find_worst_best_fvals(
  * Determine the indices of the worst, second worst and the best vertex in the current working simplex S
  */
 void _libnms_find_ordering_indices(int nmr_parameters,
-                                   local mot_float_type* func_vals, // [n+1]
+                                   mot_float_type* func_vals, // [n+1]
                                    int* ind_worst, int* ind_best,
                                    int* ind_second_worst){
 
@@ -160,7 +160,7 @@ void _libnms_find_ordering_indices(int nmr_parameters,
 /**
  * Calculate the variance of the given input values
  */
-mot_float_type _libnms_get_variance(local mot_float_type* values, int n){
+mot_float_type _libnms_get_variance(mot_float_type* values, int n){
     /** Online variance algorithm by Welford
      *  B. P. Welford (1962)."Note on a method for calculating corrected sums of squares
      *      and products". Technometrics 4(3):419-420.
@@ -192,8 +192,8 @@ mot_float_type _libnms_get_variance(local mot_float_type* values, int n){
  */
 void _libnms_calculate_centroid(
         int nmr_parameters,
-        local mot_float_type* vertices, // [n+1,n],
-        local mot_float_type* centroid, // [n]
+        mot_float_type* vertices, // [n+1,n],
+        mot_float_type* centroid, // [n]
         int ind_worst){
 
     if(get_local_id(0) == 0){
@@ -229,10 +229,10 @@ void _libnms_calculate_centroid(
  */
 bool _libnms_simplex_reflect(
         int nmr_parameters,
-        local mot_float_type* const vertices, // [n+1,n]
-        local const mot_float_type* const centroid, // [n]
-        local mot_float_type* const tmp_vertex, // [n]
-        local mot_float_type* const func_vals, // [n+1]
+        mot_float_type* const vertices, // [n+1,n]
+        const mot_float_type* const centroid, // [n]
+        mot_float_type* const tmp_vertex, // [n]
+        mot_float_type* const func_vals, // [n+1]
         mot_float_type* const reflection_fval, // [1]
         const int ind_best,
         const int ind_second_worst,
@@ -273,10 +273,10 @@ bool _libnms_simplex_reflect(
  */
 void _libnms_simplex_expand(
         int nmr_parameters,
-        local mot_float_type* vertices, // [n+1,n]
-        local const mot_float_type* const centroid, // [n]
-        local const mot_float_type* const tmp_vertex, // [n]
-        local mot_float_type* const func_vals, // [n+1]
+        mot_float_type* vertices, // [n+1,n]
+        const mot_float_type* const centroid, // [n]
+        const mot_float_type* const tmp_vertex, // [n]
+        mot_float_type* const func_vals, // [n+1]
         const mot_float_type reflection_fval,
         const int ind_best,
         const int ind_second_worst,
@@ -327,10 +327,10 @@ void _libnms_simplex_expand(
  */
 bool _libnms_simplex_contract(
         int nmr_parameters,
-        local mot_float_type* const vertices, // [n+1,n]
-        local const mot_float_type* const centroid, // [n]
-        local mot_float_type* const tmp_vertex, // [n]
-        local mot_float_type* const func_vals, // [n+1]
+        mot_float_type* const vertices, // [n+1,n]
+        const mot_float_type* const centroid, // [n]
+        mot_float_type* const tmp_vertex, // [n]
+        mot_float_type* const func_vals, // [n+1]
         const mot_float_type reflection_fval,
         const int ind_best,
         const int ind_second_worst,
@@ -386,9 +386,9 @@ bool _libnms_simplex_contract(
  */
 int lib_nmsimplex(
         int nmr_parameters,
-        local mot_float_type* const model_parameters,
+        mot_float_type* const model_parameters,
         void* data,
-        local mot_float_type* initial_simplex_scale,
+        mot_float_type* initial_simplex_scale,
         mot_float_type* fdiff,
         mot_float_type psi,
         int max_iterations,
@@ -396,7 +396,7 @@ int lib_nmsimplex(
         mot_float_type beta,
         mot_float_type gamma,
         mot_float_type delta,
-        local mot_float_type* scratch // size: nmr_parameters * 3 + (nmr_parameters + 1)^2
+        mot_float_type* scratch // size: nmr_parameters * 3 + (nmr_parameters + 1)^2
         ){
 
     int return_code = 6;         /** the default return code is that we exhausted our patience */
@@ -409,11 +409,11 @@ int lib_nmsimplex(
 
 	mot_float_type reflection_fval;      /* value of function at reflection point */
 
-    local mot_float_type* contraction_tolerance = scratch; /* used for the subplex convergence check */
-	local mot_float_type* centroid = contraction_tolerance + 1; /* centroid - coordinates, size [n] */
-	local mot_float_type* tmp_vertex = centroid + nmr_parameters; /* simplex moving coordinates , size [n] */
-    local mot_float_type* func_vals = tmp_vertex + nmr_parameters; /* value of function at each vertex, size [n + 1] */
-    local mot_float_type* vertices = func_vals + (nmr_parameters + 1);   /* holds vertices of simplex, size [(n+1) * n] */
+    mot_float_type* contraction_tolerance = scratch; /* used for the subplex convergence check */
+	mot_float_type* centroid = contraction_tolerance + 1; /* centroid - coordinates, size [n] */
+	mot_float_type* tmp_vertex = centroid + nmr_parameters; /* simplex moving coordinates , size [n] */
+    mot_float_type* func_vals = tmp_vertex + nmr_parameters; /* value of function at each vertex, size [n + 1] */
+    mot_float_type* vertices = func_vals + (nmr_parameters + 1);   /* holds vertices of simplex, size [(n+1) * n] */
 
     *fdiff = HUGE_VAL;
 

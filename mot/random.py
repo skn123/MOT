@@ -56,7 +56,7 @@ def uniform(nmr_distributions, nmr_samples, low=0, high=1, ctype='float', seed=N
                    'high': Array(high, as_scalar=True)}
 
     kernel = SimpleCLFunction.from_string('''
-        void compute(double low, double high, global uint* rng_state, global ''' + ctype + '''* samples){
+        void compute(double low, double high, uint* rng_state, ''' + ctype + '''* samples){
         
             rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
                 rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
@@ -96,7 +96,7 @@ def normal(nmr_distributions, nmr_samples, mean=0, std=1, ctype='float', seed=No
                    'std': Array(std, as_scalar=True)}
 
     kernel = SimpleCLFunction.from_string('''
-        void compute(double mean, double std, global uint* rng_state, global ''' + ctype + '''* samples){
+        void compute(double mean, double std, uint* rng_state, ''' + ctype + '''* samples){
             rand123_data rand123_rng_data = rand123_initialize_data((uint[]){
                 rng_state[0], rng_state[1], rng_state[2], rng_state[3], 
                 rng_state[4], rng_state[5], 0});

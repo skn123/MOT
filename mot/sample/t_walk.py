@@ -59,7 +59,7 @@ class ThoughtfulWalk(AbstractSampler):
 
                 .. code-block:: c
 
-                    void <func_name>(void* data, local mot_float_type* x);
+                    void <func_name>(void* data, mot_float_type* x);
 
         References:
             [1] Christen JA, Foxy C. A general purpose sampling algorithm for continuous distributions (the t-walk).
@@ -83,7 +83,7 @@ class ThoughtfulWalk(AbstractSampler):
         self._x1_log_prior = np.zeros(self._nmr_problems, dtype=float_type)
 
         self._finalize_proposal_func = finalize_proposal_func or SimpleCLFunction.from_string(
-            'void finalizeProposal(void* data, local mot_float_type* x){}')
+            'void finalizeProposal(void* data, mot_float_type* x){}')
 
         self._initialize_likelihood_prior(self._x1, self._x1_log_likelihood, self._x1_log_prior)
 
@@ -104,30 +104,30 @@ class ThoughtfulWalk(AbstractSampler):
                     ulong current_iteration, 
                     void* rng_data,
                     int chain_ind,
-                    global mot_float_type* current_position,
-                    global mot_float_type* current_log_likelihood,
-                    global mot_float_type* current_log_prior){
+                    mot_float_type* current_position,
+                    mot_float_type* current_log_likelihood,
+                    mot_float_type* current_log_prior){
                 
                 _twalk_data* twalk_data = (_twalk_data*)method_data;
                 bool is_first_work_item = get_local_id(0) == 0;
                 
-                local int* kernel_ind = twalk_data->scratch_int + 1;
-                local int* nmr_params_selected = twalk_data->scratch_int + 2;
-                local int* proposal_accepted = twalk_data->scratch_int + 3;
-                local int* params_selector = twalk_data->scratch_int + 4;
+                int* kernel_ind = twalk_data->scratch_int + 1;
+                int* nmr_params_selected = twalk_data->scratch_int + 2;
+                int* proposal_accepted = twalk_data->scratch_int + 3;
+                int* params_selector = twalk_data->scratch_int + 4;
                 
-                local mot_float_type* proposal_ll = twalk_data->scratch_mft;
-                local mot_float_type* proposal_lprior = twalk_data->scratch_mft + 1;
-                local mot_float_type* proposal = twalk_data->scratch_mft + 2;
+                mot_float_type* proposal_ll = twalk_data->scratch_mft;
+                mot_float_type* proposal_lprior = twalk_data->scratch_mft + 1;
+                mot_float_type* proposal = twalk_data->scratch_mft + 2;
                 
                 *proposal_accepted = false;
                 *proposal_ll = 0;
                 *proposal_lprior = 0;
                 
-                global mot_float_type* main_chain;
-                global mot_float_type* helper_chain;
-                global mot_float_type* main_ll;
-                global mot_float_type* main_lprior;
+                mot_float_type* main_chain;
+                mot_float_type* helper_chain;
+                mot_float_type* main_ll;
+                mot_float_type* main_lprior;
                 
                 if(is_first_work_item){
                     float r = frand(rng_data);
@@ -211,13 +211,13 @@ class ThoughtfulWalk(AbstractSampler):
                     void* data,
                     ulong current_iteration, 
                     void* rng_data,
-                    global mot_float_type* current_position,
-                    global mot_float_type* current_log_likelihood,
-                    global mot_float_type* current_log_prior){
+                    mot_float_type* current_position,
+                    mot_float_type* current_log_likelihood,
+                    mot_float_type* current_log_prior){
                 
                 _twalk_data* twalk_data = (_twalk_data*)method_data;
                 
-                local int* chain_ind = twalk_data->scratch_int;
+                int* chain_ind = twalk_data->scratch_int;
                 *chain_ind = 0;
                 
                 while(*chain_ind != 1){
@@ -238,10 +238,10 @@ class ThoughtfulWalk(AbstractSampler):
     def _get_walk_move(self):
         return parse_cl_function('''
             void _twalk_walk_move_proposal(
-                    global mot_float_type* main_chain, 
-                    global mot_float_type* helper_chain,
-                    local mot_float_type* proposal,
-                    local int* params_selector,
+                    mot_float_type* main_chain, 
+                    mot_float_type* helper_chain,
+                    mot_float_type* proposal,
+                    int* params_selector,
                     void* rng_data){
 
                 float u, a;
@@ -261,15 +261,15 @@ class ThoughtfulWalk(AbstractSampler):
             }
 
             void _twalk_walk_move(
-                    global mot_float_type* main_chain, 
-                    global mot_float_type* helper_chain,
-                    global mot_float_type* main_ll, 
-                    global mot_float_type* main_lprior,
-                    local mot_float_type* proposal,
-                    local mot_float_type* proposal_ll, 
-                    local mot_float_type* proposal_lprior,
-                    local int* proposal_accepted,
-                    local int* params_selector,
+                    mot_float_type* main_chain, 
+                    mot_float_type* helper_chain,
+                    mot_float_type* main_ll, 
+                    mot_float_type* main_lprior,
+                    mot_float_type* proposal,
+                    mot_float_type* proposal_ll, 
+                    mot_float_type* proposal_lprior,
+                    int* proposal_accepted,
+                    int* params_selector,
                     int nmr_params_selected,
                     void* data,
                     void* rng_data){
@@ -309,10 +309,10 @@ class ThoughtfulWalk(AbstractSampler):
             }
             
             void _twalk_traverse_move_proposal(
-                    global mot_float_type* main_chain, 
-                    global mot_float_type* helper_chain,
-                    local mot_float_type* proposal,
-                    local int* params_selector,
+                    mot_float_type* main_chain, 
+                    mot_float_type* helper_chain,
+                    mot_float_type* proposal,
+                    int* params_selector,
                     mot_float_type beta,
                     void* rng_data){
                              
@@ -327,15 +327,15 @@ class ThoughtfulWalk(AbstractSampler):
             }
             
             void _twalk_traverse_move(
-                    global mot_float_type* main_chain, 
-                    global mot_float_type* helper_chain,
-                    global mot_float_type* main_ll, 
-                    global mot_float_type* main_lprior,
-                    local mot_float_type* proposal,
-                    local mot_float_type* proposal_ll, 
-                    local mot_float_type* proposal_lprior,
-                    local int* proposal_accepted,
-                    local int* params_selector,
+                    mot_float_type* main_chain, 
+                    mot_float_type* helper_chain,
+                    mot_float_type* main_ll, 
+                    mot_float_type* main_lprior,
+                    mot_float_type* proposal,
+                    mot_float_type* proposal_ll, 
+                    mot_float_type* proposal_lprior,
+                    int* proposal_accepted,
+                    int* params_selector,
                     int nmr_params_selected,
                     void* data,
                     void* rng_data){
@@ -374,10 +374,10 @@ class ThoughtfulWalk(AbstractSampler):
     def _get_hop_move(self):
         return parse_cl_function('''
             void _twalk_hop_move_proposal(
-                    global mot_float_type* main_chain, 
-                    global mot_float_type* helper_chain,
-                    local mot_float_type* proposal,
-                    local int* params_selector,
+                    mot_float_type* main_chain, 
+                    mot_float_type* helper_chain,
+                    mot_float_type* proposal,
+                    int* params_selector,
                     void* rng_data){
                 
                 mot_float_type sigma = 0;
@@ -397,10 +397,10 @@ class ThoughtfulWalk(AbstractSampler):
             }
             
             float _hop_move_hasting_criteria_xy(
-                    global mot_float_type* proposal,
-                    local mot_float_type* main_chain,
-                    global mot_float_type* helper_chain,
-                    local int* params_selector,
+                    mot_float_type* proposal,
+                    mot_float_type* main_chain,
+                    mot_float_type* helper_chain,
+                    int* params_selector,
                     int nmr_params_selected){
                 
                 mot_float_type sigma = 0;
@@ -422,10 +422,10 @@ class ThoughtfulWalk(AbstractSampler):
             
             
             float _hop_move_hasting_criteria_yx(
-                    local mot_float_type* proposal,
-                    global mot_float_type* main_chain,
-                    global mot_float_type* helper_chain,
-                    local int* params_selector,
+                    mot_float_type* proposal,
+                    mot_float_type* main_chain,
+                    mot_float_type* helper_chain,
+                    int* params_selector,
                     int nmr_params_selected){
                 
                 mot_float_type sigma = 0;
@@ -446,15 +446,15 @@ class ThoughtfulWalk(AbstractSampler):
             }    
             
             void _twalk_hop_move(
-                    global mot_float_type* main_chain, 
-                    global mot_float_type* helper_chain,
-                    global mot_float_type* main_ll, 
-                    global mot_float_type* main_lprior,
-                    local mot_float_type* proposal,
-                    local mot_float_type* proposal_ll, 
-                    local mot_float_type* proposal_lprior,
-                    local int* proposal_accepted,
-                    local int* params_selector,
+                    mot_float_type* main_chain, 
+                    mot_float_type* helper_chain,
+                    mot_float_type* main_ll, 
+                    mot_float_type* main_lprior,
+                    mot_float_type* proposal,
+                    mot_float_type* proposal_ll, 
+                    mot_float_type* proposal_lprior,
+                    int* proposal_accepted,
+                    int* params_selector,
                     int nmr_params_selected,
                     void* data,
                     void* rng_data){
@@ -490,10 +490,10 @@ class ThoughtfulWalk(AbstractSampler):
     def _get_blow_move(self):
         return parse_cl_function('''
             void _twalk_blow_move_proposal(
-                    global mot_float_type* main_chain, 
-                    global mot_float_type* helper_chain,
-                    local mot_float_type* proposal,
-                    local int* params_selector,
+                    mot_float_type* main_chain, 
+                    mot_float_type* helper_chain,
+                    mot_float_type* proposal,
+                    int* params_selector,
                     void* rng_data){
 
                 mot_float_type sigma = 0;
@@ -512,10 +512,10 @@ class ThoughtfulWalk(AbstractSampler):
             }
 
             float _blow_move_hasting_criteria_xy(
-                    global mot_float_type* proposal,
-                    local mot_float_type* main_chain,
-                    global mot_float_type* helper_chain,
-                    local int* params_selector,
+                    mot_float_type* proposal,
+                    mot_float_type* main_chain,
+                    mot_float_type* helper_chain,
+                    int* params_selector,
                     int nmr_params_selected){
                 
                 mot_float_type sigma = 0;
@@ -534,10 +534,10 @@ class ThoughtfulWalk(AbstractSampler):
             }    
 
             float _blow_move_hasting_criteria_yx(
-                    local mot_float_type* proposal,
-                    global mot_float_type* main_chain,
-                    global mot_float_type* helper_chain,
-                    local int* params_selector,
+                    mot_float_type* proposal,
+                    mot_float_type* main_chain,
+                    mot_float_type* helper_chain,
+                    int* params_selector,
                     int nmr_params_selected){
                 
                 mot_float_type sigma = 0;
@@ -556,15 +556,15 @@ class ThoughtfulWalk(AbstractSampler):
             }    
 
             void _twalk_blow_move(
-                    global mot_float_type* main_chain, 
-                    global mot_float_type* helper_chain,
-                    global mot_float_type* main_ll, 
-                    global mot_float_type* main_lprior,
-                    local mot_float_type* proposal,
-                    local mot_float_type* proposal_ll, 
-                    local mot_float_type* proposal_lprior,
-                    local int* proposal_accepted,
-                    local int* params_selector,
+                    mot_float_type* main_chain, 
+                    mot_float_type* helper_chain,
+                    mot_float_type* main_ll, 
+                    mot_float_type* main_lprior,
+                    mot_float_type* proposal,
+                    mot_float_type* proposal_ll, 
+                    mot_float_type* proposal_lprior,
+                    int* proposal_accepted,
+                    int* params_selector,
                     int nmr_params_selected,
                     void* data,
                     void* rng_data){

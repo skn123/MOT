@@ -29,13 +29,13 @@ class AbstractSampler:
 
                 .. code-block:: c
 
-                        double <func_name>(local const mot_float_type* const x, void* data);
+                        double <func_name>(const mot_float_type* const x, void* data);
 
             log_prior_func (mot.lib.cl_function.CLFunction): The log-prior function. A CL function with the signature:
 
                 .. code-block:: c
 
-                    mot_float_type <func_name>(local const mot_float_type* const x, void* data);
+                    mot_float_type <func_name>(const mot_float_type* const x, void* data);
 
             x0 (ndarray): the starting positions for the sampler. Should be a two dimensional matrix
                 with for every modeling instance (first dimension) and every parameter (second dimension) a value.
@@ -91,9 +91,9 @@ class AbstractSampler:
                                      void* data,
                                      ulong current_iteration,
                                      void* rng_data,
-                                     global mot_float_type* current_position,
-                                     global mot_float_type* current_log_likelihood,
-                                     global mot_float_type* current_log_prior);
+                                     mot_float_type* current_position,
+                                     mot_float_type* current_log_likelihood,
+                                     mot_float_type* current_log_prior);
         """
         raise NotImplementedError()
 
@@ -170,10 +170,10 @@ class AbstractSampler:
         Subclasses can use this to instantiate secondary chains as well.
         """
         func = SimpleCLFunction.from_string('''
-            void compute(global mot_float_type* chain_position,
-                         global mot_float_type* log_likelihood,
-                         global mot_float_type* log_prior,
-                         local mot_float_type* x_tmp,
+            void compute(mot_float_type* chain_position,
+                         mot_float_type* log_likelihood,
+                         mot_float_type* log_prior,
+                         mot_float_type* x_tmp,
                          void* data){
                 
                 bool is_first_work_item = get_local_id(0) == 0;
@@ -264,15 +264,15 @@ class AbstractSampler:
             mot.lib.cl_function.CLFunction: the compute function
         """
         cl_func = '''
-            void compute(global uint* rng_state, 
-                         global mot_float_type* current_chain_position,
-                         global mot_float_type* current_log_likelihood,
-                         global mot_float_type* current_log_prior,
+            void compute(uint* rng_state, 
+                         mot_float_type* current_chain_position,
+                         mot_float_type* current_log_likelihood,
+                         mot_float_type* current_log_prior,
                          ulong iteration_offset, 
                          ulong nmr_iterations, 
-                         ''' + ('''global mot_float_type* samples, 
-                                   global mot_float_type* log_likelihoods,
-                                   global mot_float_type* log_priors,''' if return_output else '') + '''
+                         ''' + ('''mot_float_type* samples, 
+                                   mot_float_type* log_likelihoods,
+                                   mot_float_type* log_priors,''' if return_output else '') + '''
                          void* method_data, 
                          void* data){
                          
@@ -327,7 +327,7 @@ class AbstractSampler:
             str: the compute function for computing the log prior.
         """
         return SimpleCLFunction.from_string('''
-            mot_float_type _computeLogPrior(local const mot_float_type* x, void* data){
+            mot_float_type _computeLogPrior(const mot_float_type* x, void* data){
                 return ''' + self._log_prior_func.get_cl_function_name() + '''(x, data);
             }
         ''', dependencies=[self._log_prior_func])
@@ -342,7 +342,7 @@ class AbstractSampler:
             str: the CL code for the log likelihood compute func.
         """
         return SimpleCLFunction.from_string('''
-            double _computeLogLikelihood(local const mot_float_type* current_position, void* data){
+            double _computeLogLikelihood(const mot_float_type* current_position, void* data){
                 return ''' + self._ll_func.get_cl_function_name() + '''(current_position, data);
             }
         ''', dependencies=[self._ll_func])
@@ -408,14 +408,14 @@ class AbstractRWMSampler(AbstractSampler):
 
                 .. code-block:: c
 
-                    void <func_name>(void* data, local mot_float_type* x);
+                    void <func_name>(void* data, mot_float_type* x);
         """
         super().__init__(ll_func, log_prior_func, x0, **kwargs)
         self._proposal_stds = np.require(np.copy(proposal_stds), requirements='CAOW',
                                          dtype=self._cl_runtime_info.mot_float_dtype)
         self._use_random_scan = use_random_scan
         self._finalize_proposal_func = finalize_proposal_func or SimpleCLFunction.from_string(
-            'void finalizeProposal(void* data, local mot_float_type* x){}')
+            'void finalizeProposal(void* data, mot_float_type* x){}')
 
     def _get_mcmc_method_kernel_data(self):
         return Struct(self._get_mcmc_method_kernel_data_elements(), '_mcmc_method_data')
@@ -435,11 +435,11 @@ class AbstractRWMSampler(AbstractSampler):
                 .. code-block:: c
                     void _updateProposalState(_mcmc_method_data* method_data,
                                               ulong current_iteration,
-                                              global mot_float_type* current_position);
+                                              mot_float_type* current_position);
         """
         return '''
             void _updateProposalState(_mcmc_method_data* method_data, ulong current_iteration,
-                                      global mot_float_type* current_position){}
+                                      mot_float_type* current_position){}
         '''
 
     def _at_acceptance_callback_c_func(self):
@@ -484,13 +484,13 @@ class AbstractRWMSampler(AbstractSampler):
                     void* data,
                     ulong current_iteration, 
                     void* rng_data,
-                    global mot_float_type* current_position,
-                    global mot_float_type* current_log_likelihood,
-                    global mot_float_type* current_log_prior){
+                    mot_float_type* current_position,
+                    mot_float_type* current_log_likelihood,
+                    mot_float_type* current_log_prior){
                 
-                local mot_float_type* new_log_prior = ((_mcmc_method_data*)method_data)->x_tmp;
+                mot_float_type* new_log_prior = ((_mcmc_method_data*)method_data)->x_tmp;
                 *new_log_prior = 0;
-                local mot_float_type* new_position = ((_mcmc_method_data*)method_data)->x_tmp + 1;
+                mot_float_type* new_position = ((_mcmc_method_data*)method_data)->x_tmp + 1;
                 
                 mot_float_type new_log_likelihood;
                 bool is_first_work_item = get_local_id(0) == 0;
