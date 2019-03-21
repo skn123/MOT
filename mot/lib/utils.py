@@ -529,9 +529,7 @@ _tatsu_cl_function = '''
     data_type = /\w+(\s*(\*)?)+/;
     function_name = /\w+/;
     arglist = '(' @+:arg {',' @+:arg}* ')' | '()';
-    arg = block_arg | value_arg;
-    block_arg = /\w+\s+\(\^\w+\)\([^\)]*\)/;
-    value_arg = /[\w \*\[\]]+/;
+    arg = /[\w \*\[\]]+/;
     body = compound_statement;
     compound_statement = '{' {[/[^\{\}]*/] [compound_statement]}* '}';
 '''
