@@ -416,6 +416,17 @@ class CLFunctionParameter:
         """
         raise NotImplementedError()
 
+    @property
+    def is_block_type(self):
+        """If this parameter is a block type.
+
+        Block types are a sort of lambda functions, enabling closures in the OpenCL 2.0 language.
+
+        Returns:
+            boolean: True if this parameter is of the block type, false otherwise
+        """
+        raise NotImplementedError()
+
     def get_renamed(self, name):
         """Get a copy of the current parameter but then with a new name.
 
@@ -429,7 +440,10 @@ class CLFunctionParameter:
 
 
 _cl_data_type_parser = tatsu.compile('''
-    result = [address_space] {type_qualifiers}* ctype {pointer_star}* {pointer_qualifiers}* name {array_size}*;
+    result = block_type | value_type;
+    
+    block_type = basic_ctype '(^' name ')(' block_args ')';
+    value_type = [address_space] {type_qualifiers}* ctype {pointer_star}* {pointer_qualifiers}* name {array_size}*;
 
     address_space = ['__'] ('local' | 'global' | 'constant' | 'private');
     type_qualifiers = 'const' | 'volatile';
@@ -438,6 +452,9 @@ _cl_data_type_parser = tatsu.compile('''
     vector_type_length = '2' | '3' | '4' | '8' | '16';
     ctype = basic_ctype [vector_type_length];
     pointer_star = '*';
+    
+    block_args = @+:block_ctype {',' @+:block_ctype}*;
+    block_ctype = /[\w \*\[\]]+/;
     
     pointer_qualifiers = 'const' | 'restrict';
 
@@ -462,6 +479,8 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
         self._pointer_qualifiers = []
         self._name = ''
         self._array_sizes = []
+        self._is_block_type = False
+        self._block_args = []
 
         param = self
 
@@ -503,6 +522,14 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
                 param._array_sizes.append(int(ast[1:-1]))
                 return ast
 
+            def block_type(self, ast):
+                param._is_block_type = True
+                return ast[0] + ' ' + ''.join(ast[1:])
+
+            def block_args(self, ast):
+                param._block_args = ast
+                return ', '.join(ast)
+
         _cl_data_type_parser.parse(declaration, semantics=Semantics())
 
     @property
@@ -515,6 +542,10 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
         return new_param
 
     def get_declaration(self):
+        if self.is_block_type:
+            return '{ctype} (^{name})({args})'.format(ctype=self._basic_ctype, name=self._name,
+                                                      args=', '.join(self._block_args))
+
         declaration = ''
 
         if self._address_space:
@@ -573,6 +604,10 @@ class SimpleCLFunctionParameter(CLFunctionParameter):
     @property
     def is_array_type(self):
         return len(self.array_sizes) > 0
+
+    @property
+    def is_block_type(self):
+        return self._is_block_type
 
 
 def apply_cl_function(cl_function, kernel_data, nmr_instances, use_local_reduction=False, cl_runtime_info=None):

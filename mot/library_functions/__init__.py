@@ -166,11 +166,11 @@ class linear_cubic_interpolation(SimpleCLLibrary):
         For more information on this method, see https://en.wikipedia.org/wiki/Cubic_Hermite_spline.
 
         Example usage:
-            constant float data[] = {1.0, 2.0, 5.0, 6.0};
+            float data[] = {1.0, 2.0, 5.0, 6.0};
             linear_cubic_interpolation(1.5, 4, data);
         """
         super().__init__('''
-            double linear_cubic_interpolation(double x, int y_len, constant float* y_values){
+            double linear_cubic_interpolation(double x, int y_len, float* y_values){
                 int n = x;
                 double u = x - n;
 
