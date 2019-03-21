@@ -718,14 +718,12 @@ class _ProcedureWorker:
 
         variable_inits = []
         function_call_inputs = []
-        post_function_callbacks = []
         for parameter in self._cl_function.get_parameters():
             data = self._kernel_data[parameter.name]
-            call_args = (parameter.name, '_' + parameter.name, 'gid', parameter.address_space)
+            call_args = (parameter.name, '_' + parameter.name, 'gid')
 
             variable_inits.append(data.initialize_variable(*call_args))
             function_call_inputs.append(data.get_function_call_input(*call_args))
-            post_function_callbacks.append(data.post_function_callback(*call_args))
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
@@ -740,8 +738,6 @@ class _ProcedureWorker:
                 
                 ''' + assignment + ' ' + self._cl_function.get_cl_function_name() + '(' + \
                          ', '.join(function_call_inputs) + ''');
-                
-                ''' + '\n'.join(post_function_callbacks) + '''
             }
         '''
         return kernel_source
