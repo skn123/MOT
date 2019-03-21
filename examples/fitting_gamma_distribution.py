@@ -14,9 +14,9 @@ __licence__ = 'LGPL v3'
 
 def get_objective_function(nmr_datapoints):
     return SimpleCLFunction.from_string('''
-        double fit_gamma_distribution(local const mot_float_type* const x,
+        double fit_gamma_distribution(const mot_float_type* const x,
                                       void* data, 
-                                      local mot_float_type* objective_list){
+                                      mot_float_type* objective_list){
             
             if(x[0] < 0 || x[1] < 0){
                 return INFINITY;
@@ -24,7 +24,7 @@ def get_objective_function(nmr_datapoints):
             
             double sum = 0;
             for(uint i = 0; i < ''' + str(nmr_datapoints) + '''; i++){
-                sum += gamma_logpdf(((optimization_data*)data)->gamma_random[i], x[0], x[1]);
+                sum += gamma_logpdf(((float*)data)[i] , x[0], x[1]);
             }
             
             return -sum; // the optimization routines are minimizers
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     scale = np.random.uniform(0.1, 5, nmr_simulations)
 
     # generate some random locations on those simulated distributions
-    gamma_random = np.zeros((nmr_simulations, nmr_datapoints))
+    gamma_random = np.zeros((nmr_simulations, nmr_datapoints), dtype=np.float32)
     for i in range(nmr_datapoints):
         gamma_random[:, i] = np.random.gamma(shape, scale)
 
@@ -60,8 +60,7 @@ if __name__ == '__main__':
     x0 = np.ones((nmr_simulations, 2))
 
     # Minimize the parameters of the model given the starting points.
-    opt_output = minimize(get_objective_function(nmr_datapoints), x0,
-                          data=Struct({'gamma_random': Array(gamma_random)}, 'optimization_data'))
+    opt_output = minimize(get_objective_function(nmr_datapoints), x0, data=Array(gamma_random, 'float'))
 
     # Print the output
     print(np.column_stack([shape, scale]))
