@@ -11,8 +11,9 @@
 
 /**
  * The information needed by the random functions to generate unique random numbers.
- * The elements of this struct are unsigned integers with N words of W bits (specified by the
- * generator function in use).
+ *
+ * Each element is a struct in itself, holding unsigned integers with N words of W bits (specified by the generator
+ * function in use).
  */
 typedef struct{
     %(GENERATOR_NAME)s4x32_ctr_t counter;
@@ -20,12 +21,44 @@ typedef struct{
 } rand123_data;
 
 /**
+ * The global state variable
+ */
+global rand123_data __rng_data;
+
+
+/**
+ * Initializes the rand123_data structure.
+ *
+ * The given state is all that will be used for the random numbers, there is no implicit state added.
+ */
+void rand123_initialize(uint* state){
+    %(GENERATOR_NAME)s4x32_ctr_t c = {{state[0], state[1], state[2], state[3]}};
+    %(GENERATOR_NAME)s4x32_key_t k = {{state[4], state[5], state[6], state[7]}};
+    __rng_data = (rand123_data) {c, k};
+}
+
+/**
+ * Convert the rand123 state back into a state array.
+ */
+void rand123_finalize(uint* rng_state){
+    rng_state[0] = __rng_data.counter.v[0];
+    rng_state[1] = __rng_data.counter.v[1];
+    rng_state[2] = __rng_data.counter.v[2];
+    rng_state[3] = __rng_data.counter.v[3];
+    rng_state[4] = __rng_data.key.v[0];
+    rng_state[5] = __rng_data.key.v[1];
+    rng_state[6] = __rng_data.key.v[2];
+    rng_state[7] = __rng_data.key.v[3];
+}
+
+
+/**
  * Generates the random bits used by the random functions
  */
-uint4 rand123_generate_bits(rand123_data* rng_data){
+uint4 rand123_generate_bits(){
 
-    %(GENERATOR_NAME)s4x32_ctr_t* ctr = &rng_data->counter;
-    %(GENERATOR_NAME)s4x32_key_t* key = &rng_data->key;
+    %(GENERATOR_NAME)s4x32_ctr_t* ctr = &__rng_data.counter;
+    %(GENERATOR_NAME)s4x32_key_t* key = &__rng_data.key;
 
     union {
         %(GENERATOR_NAME)s4x32_ctr_t ctr_el;
@@ -36,33 +69,6 @@ uint4 rand123_generate_bits(rand123_data* rng_data){
     return u.vec_el;
 }
 
-/**
- * Initializes the rand123_data structure.
- *
- * The given state is all that will be used for the random numbers, there is no implicit state added.
- */
-rand123_data rand123_initialize_data(uint state[8]){
-    %(GENERATOR_NAME)s4x32_ctr_t c = {{state[0], state[1], state[2], state[3]}};
-    %(GENERATOR_NAME)s4x32_key_t k = {{state[4], state[5], state[6], state[7]}};
-
-    rand123_data rng_data = {c, k};
-    return rng_data;
-}
-
-/**
- * Convert the rand123 state back into a state array.
- */
-void rand123_data_to_array(rand123_data data, uint rng_state[8]){
-    rng_state[0] = data.counter.v[0];
-    rng_state[1] = data.counter.v[1];
-    rng_state[2] = data.counter.v[2];
-    rng_state[3] = data.counter.v[3];
-    rng_state[4] = data.key.v[0];
-    rng_state[5] = data.key.v[1];
-    rng_state[6] = data.key.v[2];
-    rng_state[7] = data.key.v[3];
-}
-
 
 /**
  * Increments the rand123 state counters for the next iteration.
@@ -70,10 +76,10 @@ void rand123_data_to_array(rand123_data data, uint rng_state[8]){
  * One needs to call this function after every call to a random number generating function
  * to ensure the next number will be different.
  */
-void rand123_increment_counters(rand123_data* rng_data){
-    if (++rng_data->counter.v[0] == 0){
-        if (++rng_data->counter.v[1] == 0){
-            ++rng_data->counter.v[2];
+void rand123_increment_counters(){
+    if (++__rng_data.counter.v[0] == 0){
+        if (++__rng_data.counter.v[1] == 0){
+            ++__rng_data.counter.v[2];
         }
     }
 }
@@ -109,65 +115,65 @@ float4 rand123_box_muller_float4(float4 x){
 /** end of Box Muller transforms */
 
 /** Random number generating functions in the Rand123 space */
-double4 rand123_uniform_double4(rand123_data* rng_data){
-    uint4 generated_bits = rand123_generate_bits(rng_data);
+double4 rand123_uniform_double4(){
+    uint4 generated_bits = rand123_generate_bits();
     return ((double) (1/pown(2.0, 32))) * convert_double4(generated_bits) +
-        ((double) (1/pown(2.0, 64))) * convert_double4(generated_bits);
+            ((double) (1/pown(2.0, 64))) * convert_double4(generated_bits);
 }
 
-double4 rand123_normal_double4(rand123_data* rng_data){
-    return rand123_box_muller_double4(rand123_uniform_double4(rng_data));
+double4 rand123_normal_double4(){
+    return rand123_box_muller_double4(rand123_uniform_double4());
 }
 
-float4 rand123_uniform_float4(rand123_data* rng_data){
-    uint4 generated_bits = rand123_generate_bits(rng_data);
+float4 rand123_uniform_float4(){
+    uint4 generated_bits = rand123_generate_bits();
     return (float)(1/pown(2.0, 32)) * convert_float4(generated_bits);
 }
 
-float4 rand123_normal_float4(rand123_data* rng_data){
-    return rand123_box_muller_float4(rand123_uniform_float4(rng_data));
+float4 rand123_normal_float4(){
+    return rand123_box_muller_float4(rand123_uniform_float4());
 }
 /** End of the random number generating functions */
 
 
-double4 rand4(void* rng_data){
-    double4 val = rand123_uniform_double4((rand123_data*)rng_data);
-    rand123_increment_counters((rand123_data*)rng_data);
+double4 rand4(){
+    double4 val = rand123_uniform_double4();
+    rand123_increment_counters();
     return val;
 }
 
-double4 randn4(void* rng_data){
-    double4 val = rand123_normal_double4((rand123_data*)rng_data);
-    rand123_increment_counters((rand123_data*)rng_data);
+double4 randn4(){
+    double4 val = rand123_normal_double4();
+    rand123_increment_counters();
     return val;
 }
 
-float4 frand4(void* rng_data){
-    float4 val = rand123_uniform_float4((rand123_data*)rng_data);
-    rand123_increment_counters((rand123_data*)rng_data);
+float4 frand4(){
+    float4 val = rand123_uniform_float4();
+    rand123_increment_counters();
     return val;
 }
 
-float4 frandn4(void* rng_data){
-    float4 val = rand123_normal_float4((rand123_data*)rng_data);
-    rand123_increment_counters((rand123_data*)rng_data);
+float4 frandn4(){
+    float4 val = rand123_normal_float4();
+    rand123_increment_counters();
     return val;
 }
 
-double rand(void* rng_data){
-    return rand4(rng_data).x;
+double rand(){
+    return rand4().x;
 }
 
-double randn(void* rng_data){
-    return randn4(rng_data).x;
+double randn(){
+    return randn4().x;
 }
 
-float frand(void* rng_data){
-    return frand4(rng_data).x;
+float frand(){
+    return frand4().x;
 }
 
-float frandn(void* rng_data){
-    return frandn4(rng_data).x;
+float frandn(){
+    return frandn4().x;
 }
 
 #endif // _RAND123_DOT_CL

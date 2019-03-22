@@ -1,6 +1,3 @@
-import os
-
-from mot.lib.cl_function import SimpleCLCodeObject
 from mot.lib.kernel_data import LocalMemory
 from mot.library_functions.base import SimpleCLLibrary, SimpleCLLibraryFromFile, CLLibrary
 from pkg_resources import resource_filename
@@ -88,20 +85,6 @@ class LogCosh(SimpleCLLibrary):
                 return fabs(x) + log(1 + exp(-2.0 * fabs(x))) - log(2.0);
             }
         ''')
-
-
-class Rand123(SimpleCLCodeObject):
-    def __init__(self):
-        generator = 'threefry'
-
-        src = open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/openclfeatures.h'), ), 'r').read()
-        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/array.h'), ), 'r').read()
-        src += open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/{}.h'.format(generator)), ),
-                    'r').read()
-        src += (open(os.path.abspath(resource_filename('mot', 'data/opencl/random123/rand123.h'), ), 'r').read() % {
-            'GENERATOR_NAME': (generator)
-        })
-        super().__init__(src)
 
 
 class EuclidianNormFunction(SimpleCLLibraryFromFile):

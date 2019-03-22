@@ -102,7 +102,6 @@ class ThoughtfulWalk(AbstractSampler):
                     void* method_data,
                     void* data,
                     ulong current_iteration, 
-                    void* rng_data,
                     int chain_ind,
                     mot_float_type* current_position,
                     mot_float_type* current_log_likelihood,
@@ -130,7 +129,7 @@ class ThoughtfulWalk(AbstractSampler):
                 mot_float_type* main_lprior;
                 
                 if(is_first_work_item){
-                    float r = frand(rng_data);
+                    float r = frand();
                     
                     if(r < ''' + str(self._move_probabilities[0]) + '''){
                         *kernel_ind = 0;
@@ -147,7 +146,7 @@ class ThoughtfulWalk(AbstractSampler):
                     
                     *nmr_params_selected = 0;
                     for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        params_selector[i] = frand(rng_data) < ''' + str(self._param_choose_prob) + ''';
+                        params_selector[i] = frand() < ''' + str(self._param_choose_prob) + ''';
                         (*nmr_params_selected)++;
                     }
                 }
@@ -169,22 +168,22 @@ class ThoughtfulWalk(AbstractSampler):
                 if(*kernel_ind == 0){
                     _twalk_walk_move(main_chain, helper_chain, main_ll, main_lprior,
                                      proposal, proposal_ll, proposal_lprior, proposal_accepted,
-                                     params_selector, *nmr_params_selected, data, rng_data);
+                                     params_selector, *nmr_params_selected, data);
                 }
                 else if(*kernel_ind == 1){
                     _twalk_traverse_move(main_chain, helper_chain, main_ll, main_lprior,
                                          proposal, proposal_ll, proposal_lprior, proposal_accepted,
-                                         params_selector, *nmr_params_selected, data, rng_data);
+                                         params_selector, *nmr_params_selected, data);
                 }
                 else if(*kernel_ind == 2){
                     _twalk_hop_move(main_chain, helper_chain, main_ll, main_lprior,
                                     proposal, proposal_ll, proposal_lprior, proposal_accepted,
-                                    params_selector, *nmr_params_selected, data, rng_data);
+                                    params_selector, *nmr_params_selected, data);
                 }
                 else{
                     _twalk_blow_move(main_chain, helper_chain, main_ll, main_lprior,
                                      proposal, proposal_ll, proposal_lprior, proposal_accepted,
-                                     params_selector, *nmr_params_selected, data, rng_data);
+                                     params_selector, *nmr_params_selected, data);
                 }
                 
                 if(is_first_work_item && *proposal_accepted){
@@ -210,7 +209,6 @@ class ThoughtfulWalk(AbstractSampler):
                     void* method_data,
                     void* data,
                     ulong current_iteration, 
-                    void* rng_data,
                     mot_float_type* current_position,
                     mot_float_type* current_log_likelihood,
                     mot_float_type* current_log_prior){
@@ -222,11 +220,11 @@ class ThoughtfulWalk(AbstractSampler):
                 
                 while(*chain_ind != 1){
                     if(get_local_id(0) == 0){
-                        *chain_ind = frand(rng_data) > 0.5;
+                        *chain_ind = frand() > 0.5;
                     }
                     barrier(CLK_LOCAL_MEM_FENCE);
                     
-                    _twalk_advance_chain(method_data, data, current_iteration, rng_data, *chain_ind, 
+                    _twalk_advance_chain(method_data, data, current_iteration, *chain_ind, 
                                          current_position, current_log_likelihood, current_log_prior);                         
                 }
             }
@@ -241,15 +239,14 @@ class ThoughtfulWalk(AbstractSampler):
                     mot_float_type* main_chain, 
                     mot_float_type* helper_chain,
                     mot_float_type* proposal,
-                    int* params_selector,
-                    void* rng_data){
+                    int* params_selector){
 
                 float u, a;
                 const float aw = ''' + str(self._walk_scale) + ''';
 
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     if(params_selector[i]){
-                        u = frand(rng_data);
+                        u = frand();
                         a = (aw / (1 + aw)) * (-1 + 2 * u + aw * u * u);
 
                         proposal[i] = main_chain[i] + a * (main_chain[i] - helper_chain[i]);
@@ -271,13 +268,12 @@ class ThoughtfulWalk(AbstractSampler):
                     int* proposal_accepted,
                     int* params_selector,
                     int nmr_params_selected,
-                    void* data,
-                    void* rng_data){
+                    void* data){
 
                 bool is_first_work_item = get_local_id(0) == 0;
 
                 if(is_first_work_item){
-                    _twalk_walk_move_proposal(main_chain, helper_chain, proposal, params_selector, rng_data);
+                    _twalk_walk_move_proposal(main_chain, helper_chain, proposal, params_selector);
                     ''' + self._finalize_proposal_func.get_cl_function_name() + '''(data, proposal);
 
                     *proposal_lprior = _computeLogPrior(proposal, data);
@@ -288,7 +284,7 @@ class ThoughtfulWalk(AbstractSampler):
                     *proposal_ll = _computeLogLikelihood(proposal, data);
 
                     if(is_first_work_item){    
-                        *proposal_accepted = frand(rng_data) < exp((*proposal_ll + *proposal_lprior) 
+                        *proposal_accepted = frand() < exp((*proposal_ll + *proposal_lprior) 
                                                                    - (*main_ll + *main_lprior));
                     }
                 }
@@ -298,8 +294,8 @@ class ThoughtfulWalk(AbstractSampler):
 
     def _get_traverse_move(self):
         return parse_cl_function('''
-            float _twalk_traverse_move_compute_beta(void* rng_data){            
-                float4 r = frand4(rng_data);
+            float _twalk_traverse_move_compute_beta(){            
+                float4 r = frand4();
                 float at = ''' + str(self._traverse_scale) + ''';
                 
                 if(r.x < (at - 1.0) / (2.0 * at)){
@@ -313,8 +309,7 @@ class ThoughtfulWalk(AbstractSampler):
                     mot_float_type* helper_chain,
                     mot_float_type* proposal,
                     int* params_selector,
-                    mot_float_type beta,
-                    void* rng_data){
+                    mot_float_type beta){
                              
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     if(params_selector[i]){
@@ -337,16 +332,15 @@ class ThoughtfulWalk(AbstractSampler):
                     int* proposal_accepted,
                     int* params_selector,
                     int nmr_params_selected,
-                    void* data,
-                    void* rng_data){
+                    void* data){
                 
                 float beta;
                 bool is_first_work_item = get_local_id(0) == 0;
                 
                 if(is_first_work_item){
-                    beta = _twalk_traverse_move_compute_beta(rng_data);    
+                    beta = _twalk_traverse_move_compute_beta();    
                     _twalk_traverse_move_proposal(main_chain, helper_chain, proposal, 
-                                                  params_selector, beta, rng_data);
+                                                  params_selector, beta);
                     ''' + self._finalize_proposal_func.get_cl_function_name() + '''(data, proposal);
                     
                     *proposal_lprior = _computeLogPrior(proposal, data);
@@ -361,9 +355,9 @@ class ThoughtfulWalk(AbstractSampler):
                             *proposal_accepted = true;
                         }
                         else{
-                            *proposal_accepted = frand(rng_data) < exp((*proposal_ll + *proposal_lprior) 
-                                                                       - (*main_ll + *main_lprior)
-                                                                       + (nmr_params_selected - 2) * log(beta));
+                            *proposal_accepted = frand() < exp((*proposal_ll + *proposal_lprior) 
+                                                               - (*main_ll + *main_lprior)
+                                                               + (nmr_params_selected - 2) * log(beta));
                         }
                     }
                 }
@@ -377,8 +371,7 @@ class ThoughtfulWalk(AbstractSampler):
                     mot_float_type* main_chain, 
                     mot_float_type* helper_chain,
                     mot_float_type* proposal,
-                    int* params_selector,
-                    void* rng_data){
+                    int* params_selector){
                 
                 mot_float_type sigma = 0;
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
@@ -388,7 +381,7 @@ class ThoughtfulWalk(AbstractSampler):
                     
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     if(params_selector[i]){
-                        proposal[i] = main_chain[i] + sigma * frandn(rng_data);
+                        proposal[i] = main_chain[i] + sigma * frandn();
                     }
                     else{
                         proposal[i] = main_chain[i];
@@ -456,13 +449,12 @@ class ThoughtfulWalk(AbstractSampler):
                     int* proposal_accepted,
                     int* params_selector,
                     int nmr_params_selected,
-                    void* data,
-                    void* rng_data){
+                    void* data){
             
                 bool is_first_work_item = get_local_id(0) == 0;
 
                 if(is_first_work_item){    
-                    _twalk_hop_move_proposal(main_chain, helper_chain, proposal, params_selector, rng_data);
+                    _twalk_hop_move_proposal(main_chain, helper_chain, proposal, params_selector);
                     ''' + self._finalize_proposal_func.get_cl_function_name() + '''(data, proposal);
 
                     *proposal_lprior = _computeLogPrior(proposal, data);
@@ -478,9 +470,9 @@ class ThoughtfulWalk(AbstractSampler):
                         float g_yx = _hop_move_hasting_criteria_yx(proposal, main_chain, helper_chain, 
                                                                    params_selector, nmr_params_selected);
                         
-                        *proposal_accepted = frand(rng_data) < exp((*proposal_ll + *proposal_lprior) 
-                                                                       - (*main_ll + *main_lprior) 
-                                                                       + (g_xy - g_yx));
+                        *proposal_accepted = frand() < exp((*proposal_ll + *proposal_lprior) 
+                                                           - (*main_ll + *main_lprior) 
+                                                           + (g_xy - g_yx));
                     }
                 }
                 barrier(CLK_LOCAL_MEM_FENCE);
@@ -493,8 +485,7 @@ class ThoughtfulWalk(AbstractSampler):
                     mot_float_type* main_chain, 
                     mot_float_type* helper_chain,
                     mot_float_type* proposal,
-                    int* params_selector,
-                    void* rng_data){
+                    int* params_selector){
 
                 mot_float_type sigma = 0;
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
@@ -503,7 +494,7 @@ class ThoughtfulWalk(AbstractSampler):
 
                 for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
                     if(params_selector[i]){
-                        proposal[i] = helper_chain[i] + sigma * frandn(rng_data);
+                        proposal[i] = helper_chain[i] + sigma * frandn();
                     }
                     else{
                         proposal[i] = main_chain[i];
@@ -566,13 +557,12 @@ class ThoughtfulWalk(AbstractSampler):
                     int* proposal_accepted,
                     int* params_selector,
                     int nmr_params_selected,
-                    void* data,
-                    void* rng_data){
+                    void* data){
 
                 bool is_first_work_item = get_local_id(0) == 0;
 
                 if(is_first_work_item){    
-                    _twalk_blow_move_proposal(main_chain, helper_chain, proposal, params_selector, rng_data);
+                    _twalk_blow_move_proposal(main_chain, helper_chain, proposal, params_selector);
                     ''' + self._finalize_proposal_func.get_cl_function_name() + '''(data, proposal);
 
                     *proposal_lprior = _computeLogPrior(proposal, data);
@@ -588,9 +578,9 @@ class ThoughtfulWalk(AbstractSampler):
                         float g_yx = _blow_move_hasting_criteria_yx(proposal, main_chain, helper_chain, 
                                                                     params_selector, nmr_params_selected);
 
-                        *proposal_accepted = frand(rng_data) < exp((*proposal_ll + *proposal_lprior) 
-                                                                       - (*main_ll + *main_lprior) 
-                                                                       + (g_xy - g_yx));
+                        *proposal_accepted = frand() < exp((*proposal_ll + *proposal_lprior) 
+                                                           - (*main_ll + *main_lprior) 
+                                                           + (g_xy - g_yx));
                     }
                 }
                 barrier(CLK_LOCAL_MEM_FENCE);

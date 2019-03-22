@@ -127,6 +127,31 @@ class KernelData:
         """
         raise NotImplementedError()
 
+    def get_context_variable_declaration(self, name):
+        """Get the program scope variable declaration for this data.
+
+        This is used when the variable is supposed to be loaded as a program scope variable.
+
+        Returns:
+            str: the CL code variable declaration
+        """
+        raise NotImplementedError()
+
+    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        """Initialize the program scope context variable
+
+        This should initialize the global scope context variable.
+
+        Args:
+             variable_name (str): the program scope variable name
+             kernel_param_name (str): the kernel parameter name (given in :meth:`get_kernel_parameters`).
+             problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
+
+        Returns:
+            str: the necessary CL code to initialize this variable
+        """
+        raise NotImplementedError()
+
     def get_kernel_parameters(self, kernel_param_name):
         """Get the kernel argument declarations for this kernel data.
 
@@ -277,6 +302,26 @@ class Struct(KernelData):
             return '(void*)(&{})'.format(variable_name)
         return '&' + variable_name
 
+    def get_context_variable_declaration(self, name):
+        if self._anonymous:
+            raise ValueError('Anonymous structs are not allowed as program scope context variables.')
+        return 'global {} {};'.format(self._ctype, name)
+
+    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return_str = ''
+        for name, data in self._elements.items():
+            return_str += data.initialize_variable('{}_{}'.format(variable_name, name),
+                                                   '{}_{}'.format(kernel_param_name, name),
+                                                   problem_id_substitute)
+
+        inits = [data.get_struct_initialization(
+            '{}_{}'.format(variable_name, name),
+            '{}_{}'.format(kernel_param_name, name), problem_id_substitute) for name, data in self._elements.items()]
+
+        return return_str + '''
+            {v_name} = ({ctype}) {{ {inits} }};
+        '''.format(ctype=self._ctype, v_name=variable_name, inits=', '.join(inits))
+
     def get_kernel_parameters(self, kernel_param_name):
         parameters = []
         for name, d in self._elements.items():
@@ -346,6 +391,13 @@ class Scalar(KernelData):
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
         return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
+
+    def get_context_variable_declaration(self, name):
+        return 'global {} {};'.format(self._ctype, name)
+
+    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return '{} = {};'.format(
+            variable_name, self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute))
 
     def get_kernel_parameters(self, kernel_param_name):
         return []
@@ -428,6 +480,12 @@ class PrivateMemory(KernelData):
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
         return kernel_param_name
 
+    def get_context_variable_declaration(self, name):
+        raise ValueError('Private memory arrays can not be used as context variables.')
+
+    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        raise ValueError('Private memory arrays can not be used as context variables.')
+
     def get_kernel_parameters(self, kernel_param_name):
         return []
 
@@ -490,6 +548,12 @@ class LocalMemory(KernelData):
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
         return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
+
+    def get_context_variable_declaration(self, name):
+        raise ValueError('Local memory arrays can not be used as context variables.')
+
+    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        raise ValueError('Local memory arrays can not be used as context variables.')
 
     def get_kernel_parameters(self, kernel_param_name):
         return ['local {}* restrict {}'.format(self._ctype, kernel_param_name)]
@@ -627,6 +691,15 @@ class Array(KernelData):
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
         return self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute)
 
+    def get_context_variable_declaration(self, name):
+        if self._as_scalar:
+            return 'global {} {};'.format(self._ctype, name)
+        return 'global {}* {};'.format(self._ctype, name)
+
+    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        return '{} = {};'.format(
+            variable_name, self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute))
+
     def get_kernel_parameters(self, kernel_param_name):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
 
@@ -681,12 +754,12 @@ class CompositeArray(KernelData):
         """An array filled with the given kernel data elements.
 
         Each of the given elements should be a :class:`Scalar` or an :class:`Array` with the property `as_scalar`
-        set to True. We will load each value of the given elements into a private array.
+        set to True. We will load each value of the given elements into a composite array.
 
         Args:
-            elements (List[KernelData]): the kernel data elements to load into the private array
+            elements (List[KernelData]): the kernel data elements to load into the composite array
             ctype (str): the data type of this structure
-            address_space (str): the address space for the allocation of the main array
+            address_space (str): the address space for the allocation of the composite array
         """
         self._elements = elements
         self._ctype = ctype
@@ -746,6 +819,14 @@ class CompositeArray(KernelData):
 
     def get_struct_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
         return self._composite_array.get_struct_initialization(variable_name, kernel_param_name, problem_id_substitute)
+
+    def get_context_variable_declaration(self, name):
+        return self._composite_array.get_context_variable_declaration(name)
+
+    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+        #todo
+        # use initialize_variable
+        raise NotImplementedError()
 
     def get_kernel_parameters(self, kernel_param_name):
         parameters = list(self._composite_array.get_kernel_parameters(kernel_param_name))
