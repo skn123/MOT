@@ -137,7 +137,7 @@ class KernelData:
         """
         raise NotImplementedError()
 
-    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+    def get_context_variable_initialization(self, variable_name, kernel_param_name):
         """Initialize the program scope context variable
 
         This should initialize the global scope context variable.
@@ -145,7 +145,6 @@ class KernelData:
         Args:
              variable_name (str): the program scope variable name
              kernel_param_name (str): the kernel parameter name (given in :meth:`get_kernel_parameters`).
-             problem_id_substitute (str): the substitute for the ``{problem_id}`` in the kernel data info elements.
 
         Returns:
             str: the necessary CL code to initialize this variable
@@ -303,24 +302,10 @@ class Struct(KernelData):
         return '&' + variable_name
 
     def get_context_variable_declaration(self, name):
-        if self._anonymous:
-            raise ValueError('Anonymous structs are not allowed as program scope context variables.')
-        return 'global {} {};'.format(self._ctype, name)
+        raise ValueError('Structs are not allowed as program scope context variables.')
 
-    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
-        return_str = ''
-        for name, data in self._elements.items():
-            return_str += data.initialize_variable('{}_{}'.format(variable_name, name),
-                                                   '{}_{}'.format(kernel_param_name, name),
-                                                   problem_id_substitute)
-
-        inits = [data.get_struct_initialization(
-            '{}_{}'.format(variable_name, name),
-            '{}_{}'.format(kernel_param_name, name), problem_id_substitute) for name, data in self._elements.items()]
-
-        return return_str + '''
-            {v_name} = ({ctype}) {{ {inits} }};
-        '''.format(ctype=self._ctype, v_name=variable_name, inits=', '.join(inits))
+    def get_context_variable_initialization(self, variable_name, kernel_param_name):
+        raise ValueError('Structs are not allowed as program scope context variables.')
 
     def get_kernel_parameters(self, kernel_param_name):
         parameters = []
@@ -395,9 +380,8 @@ class Scalar(KernelData):
     def get_context_variable_declaration(self, name):
         return 'global {} {};'.format(self._ctype, name)
 
-    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
-        return '{} = {};'.format(
-            variable_name, self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute))
+    def get_context_variable_initialization(self, variable_name, kernel_param_name):
+        return '{} = {};'.format(variable_name, self.get_function_call_input(variable_name, kernel_param_name, ''))
 
     def get_kernel_parameters(self, kernel_param_name):
         return []
@@ -483,7 +467,7 @@ class PrivateMemory(KernelData):
     def get_context_variable_declaration(self, name):
         raise ValueError('Private memory arrays can not be used as context variables.')
 
-    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+    def get_context_variable_initialization(self, variable_name, kernel_param_name):
         raise ValueError('Private memory arrays can not be used as context variables.')
 
     def get_kernel_parameters(self, kernel_param_name):
@@ -552,7 +536,7 @@ class LocalMemory(KernelData):
     def get_context_variable_declaration(self, name):
         raise ValueError('Local memory arrays can not be used as context variables.')
 
-    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
+    def get_context_variable_initialization(self, variable_name, kernel_param_name):
         raise ValueError('Local memory arrays can not be used as context variables.')
 
     def get_kernel_parameters(self, kernel_param_name):
@@ -693,12 +677,11 @@ class Array(KernelData):
 
     def get_context_variable_declaration(self, name):
         if self._as_scalar:
-            return 'global {} {};'.format(self._ctype, name)
+            raise ValueError('Arrays marked as scalars are not allowed as program scope context variables.')
         return 'global {}* {};'.format(self._ctype, name)
 
-    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
-        return '{} = {};'.format(
-            variable_name, self.get_function_call_input(variable_name, kernel_param_name, problem_id_substitute))
+    def get_context_variable_initialization(self, variable_name, kernel_param_name):
+        return '{} = {};'.format(variable_name, kernel_param_name)
 
     def get_kernel_parameters(self, kernel_param_name):
         return ['global {}* restrict {}'.format(self._ctype, kernel_param_name)]
@@ -821,12 +804,10 @@ class CompositeArray(KernelData):
         return self._composite_array.get_struct_initialization(variable_name, kernel_param_name, problem_id_substitute)
 
     def get_context_variable_declaration(self, name):
-        return self._composite_array.get_context_variable_declaration(name)
+        raise ValueError('Composite arrays are not allowed as program scope context variables.')
 
-    def get_context_variable_initialization(self, variable_name, kernel_param_name, problem_id_substitute):
-        #todo
-        # use initialize_variable
-        raise NotImplementedError()
+    def get_context_variable_initialization(self, variable_name, kernel_param_name):
+        raise ValueError('Composite arrays are not allowed as program scope context variables.')
 
     def get_kernel_parameters(self, kernel_param_name):
         parameters = list(self._composite_array.get_kernel_parameters(kernel_param_name))

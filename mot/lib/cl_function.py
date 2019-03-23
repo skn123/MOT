@@ -780,18 +780,16 @@ class _ProcedureWorker:
 
         context_inits = []
         for name, data in self._context_variables.items():
-            context_inits.append(data.get_context_variable_initialization(name, '_context_' + name, 'gid'))
+            context_inits.append(data.get_context_variable_initialization(name, '_context_' + name))
 
         kernel_source = ''
         kernel_source += get_float_type_def(self._double_precision)
-
-        if self._enable_rng:
-            kernel_source += self._get_rng_cl_code()
-
         kernel_source += '\n'.join(data.get_type_definitions() for data in self._kernel_data.values())
         kernel_source += '\n'.join(data.get_type_definitions() for data in self._context_variables.values())
         kernel_source += '\n'.join(data.get_context_variable_declaration(name)
                                    for name, data in self._context_variables.items())
+        if self._enable_rng:
+            kernel_source += self._get_rng_cl_code()
         kernel_source += self._cl_function.get_cl_code()
 
         kernel_source += '''        
@@ -801,12 +799,8 @@ class _ProcedureWorker:
                 ''' + '\n'.join(variable_inits) + '''     
                 ''' + '\n'.join(context_inits) + '''
                 
-                ''' + ('if(get_local_id(0) == 0){rand123_initialize(__rng_state);}' if self._enable_rng else '') + ''' 
-                
                 ''' + assignment + ' ' + self._cl_function.get_cl_function_name() + '(' + \
                          ', '.join(function_call_inputs) + ''');
-                
-                ''' + ('if(get_local_id(0) == 0){rand123_finalize(__rng_state);}' if self._enable_rng else '') + '''
             }
         '''
         return kernel_source
