@@ -170,28 +170,17 @@ class AbstractSampler:
             void compute(mot_float_type* chain_position,
                          mot_float_type* log_likelihood,
                          mot_float_type* log_prior,
-                         mot_float_type* x_tmp,
                          void* data){
-                
-                bool is_first_work_item = get_local_id(0) == 0;
     
-                if(is_first_work_item){
-                    for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                        x_tmp[i] = chain_position[i];
-                    }
-                    *log_prior = _computeLogPrior(x_tmp, data);
-                }
-                barrier(CLK_LOCAL_MEM_FENCE);
-                    
-                *log_likelihood = _computeLogLikelihood(x_tmp, data);
+                *log_prior = _computeLogPrior(chain_position, data);
+                *log_likelihood = _computeLogLikelihood(chain_position, data);
             }
         ''', dependencies=[self._get_log_prior_cl_func(), self._get_log_likelihood_cl_func()])
 
         kernel_data = {
-            'chain_position': Array(positions, 'mot_float_type', mode='rw', warn_extra_copy=True),
+            'chain_position': Array(positions, 'mot_float_type', mode='r'),
             'log_likelihood': Array(log_likelihoods, 'mot_float_type', mode='rw', warn_extra_copy=True),
             'log_prior': Array(log_priors, 'mot_float_type', mode='rw', warn_extra_copy=True),
-            'x_tmp': LocalMemory('mot_float_type', self._nmr_params),
             'data': self._data
         }
 
