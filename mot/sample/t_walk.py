@@ -389,32 +389,7 @@ class ThoughtfulWalk(AbstractSampler):
                 }
             }
             
-            float _hop_move_hasting_criteria_xy(
-                    mot_float_type* proposal,
-                    mot_float_type* main_chain,
-                    mot_float_type* helper_chain,
-                    int* params_selector,
-                    int nmr_params_selected){
-                
-                mot_float_type sigma = 0;
-                double sum = 0;
-                for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                    sigma = max(sigma, params_selector[i] * fabs(main_chain[i] - helper_chain[i]));
-                    sum += pown(proposal[i] - main_chain[i], 2);
-                }
-                sigma /= 3.0;
-                    
-                if(nmr_params_selected > 0){
-                    return -(nmr_params_selected/2.0) * log(2*M_PI) 
-                           + nmr_params_selected * log(3.0)
-                           - nmr_params_selected * log(sigma) 
-                           - 9 * sum / (2 * sigma * sigma);
-                }
-                return 0;
-            }    
-            
-            
-            float _hop_move_hasting_criteria_yx(
+            float _hop_move_hasting_criteria(
                     mot_float_type* proposal,
                     mot_float_type* main_chain,
                     mot_float_type* helper_chain,
@@ -465,10 +440,10 @@ class ThoughtfulWalk(AbstractSampler):
                     *proposal_ll = _computeLogLikelihood(proposal, data);
 
                     if(is_first_work_item){
-                        float g_xy = _hop_move_hasting_criteria_xy(main_chain, proposal, helper_chain, 
-                                                                   params_selector, nmr_params_selected);
-                        float g_yx = _hop_move_hasting_criteria_yx(proposal, main_chain, helper_chain, 
-                                                                   params_selector, nmr_params_selected);
+                        float g_xy = _hop_move_hasting_criteria(main_chain, proposal, helper_chain, 
+                                                                params_selector, nmr_params_selected);
+                        float g_yx = _hop_move_hasting_criteria(proposal, main_chain, helper_chain, 
+                                                                params_selector, nmr_params_selected);
                         
                         *proposal_accepted = frand() < exp((*proposal_ll + *proposal_lprior) 
                                                            - (*main_ll + *main_lprior) 
@@ -502,29 +477,7 @@ class ThoughtfulWalk(AbstractSampler):
                 }
             }
 
-            float _blow_move_hasting_criteria_xy(
-                    mot_float_type* proposal,
-                    mot_float_type* main_chain,
-                    mot_float_type* helper_chain,
-                    int* params_selector,
-                    int nmr_params_selected){
-                
-                mot_float_type sigma = 0;
-                double sum = 0;
-                for(uint i = 0; i < ''' + str(self._nmr_params) + '''; i++){
-                    sigma = max(sigma, params_selector[i] * fabs(main_chain[i] - helper_chain[i]));
-                    sum += pown(proposal[i] - helper_chain[i], 2);
-                }
-                
-                if(nmr_params_selected > 0){
-                    return -(nmr_params_selected/2.0) * log(2*M_PI) 
-                           - nmr_params_selected * log(sigma) 
-                           - sum / (2 * sigma * sigma);
-                }
-                return 0;
-            }    
-
-            float _blow_move_hasting_criteria_yx(
+            float _blow_move_hasting_criteria(
                     mot_float_type* proposal,
                     mot_float_type* main_chain,
                     mot_float_type* helper_chain,
@@ -573,10 +526,10 @@ class ThoughtfulWalk(AbstractSampler):
                     *proposal_ll = _computeLogLikelihood(proposal, data);
 
                     if(is_first_work_item){
-                        float g_xy = _blow_move_hasting_criteria_xy(main_chain, proposal, helper_chain, 
-                                                                    params_selector, nmr_params_selected);
-                        float g_yx = _blow_move_hasting_criteria_yx(proposal, main_chain, helper_chain, 
-                                                                    params_selector, nmr_params_selected);
+                        float g_xy = _blow_move_hasting_criteria(main_chain, proposal, helper_chain, 
+                                                                 params_selector, nmr_params_selected);
+                        float g_yx = _blow_move_hasting_criteria(proposal, main_chain, helper_chain, 
+                                                                 params_selector, nmr_params_selected);
 
                         *proposal_accepted = frand() < exp((*proposal_ll + *proposal_lprior) 
                                                            - (*main_ll + *main_lprior) 
