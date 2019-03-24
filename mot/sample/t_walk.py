@@ -285,7 +285,7 @@ class ThoughtfulWalk(AbstractSampler):
 
                     if(is_first_work_item){    
                         *proposal_accepted = frand() < exp((*proposal_ll + *proposal_lprior) 
-                                                                   - (*main_ll + *main_lprior));
+                                                           - (*main_ll + *main_lprior));
                     }
                 }
                 barrier(CLK_LOCAL_MEM_FENCE);
