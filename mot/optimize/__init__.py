@@ -222,7 +222,7 @@ def get_minimizer_options(method):
     elif method == 'SimulatedAnnealing':
         return {'patience': 100,
                 'state_update_func': 'AMWG',
-                'annealing_schedule': 'Linear'}
+                'annealing_schedule': 'Exponential'}
 
     raise ValueError('Could not find the specified method "{}".'.format(method))
 

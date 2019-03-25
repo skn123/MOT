@@ -13,7 +13,7 @@ class SimulatedAnnealing(SimpleCLLibrary):
 
     def __init__(self, eval_func, nmr_parameters,
                  patience=10, state_update_func=None, annealing_schedule=None):
-        """The simulated annealing implementation.
+        """Function minimization using simulated annealing.
 
         Args:
             eval_func (mot.lib.cl_function.CLFunction): the function we want to optimize, Should be of signature:
@@ -32,12 +32,17 @@ class SimulatedAnnealing(SimpleCLLibrary):
         super().__init__('''
             int simulated_annealing(mot_float_type* model_parameters, void* data, void* sa_data){
             
-                double* temperature = ((_simulated_annealing_data*)sa_data)->temperature;
-                *temperature = ''' + str(self._annealing_schedule.get_starting_temperature(nmr_iterations)) + ''';
-                
-                double* current_fval = ((_simulated_annealing_data*)sa_data)->current_fval;
-                double* best_fval = ((_simulated_annealing_data*)sa_data)->best_fval;
+                double* temperature    = ((_simulated_annealing_data*)sa_data)->temperature;
+                double* current_fval   = ((_simulated_annealing_data*)sa_data)->current_fval;
+                double* best_fval      = ((_simulated_annealing_data*)sa_data)->best_fval;
                 mot_float_type* best_x = ((_simulated_annealing_data*)sa_data)->best_x;
+
+                ''' + str(self._annealing_schedule.get_init_function(nmr_iterations).get_cl_function_name()) + '''(
+                    temperature, ((_simulated_annealing_data*)sa_data)->annealing_schedule_data);
+                
+                ''' + state_update_func.get_init_function(eval_func, nmr_parameters).get_cl_function_name() + '''(
+                        model_parameters, current_fval, *temperature, 
+                        ((_simulated_annealing_data*)sa_data)->state_update_data, data);
                 
                 *current_fval = ''' + eval_func.get_cl_function_name() + '''(model_parameters, data);
                 *best_fval = *current_fval;
@@ -54,6 +59,9 @@ class SimulatedAnnealing(SimpleCLLibrary):
                         model_parameters, current_fval, i, *temperature, 
                         ((_simulated_annealing_data*)sa_data)->state_update_data, data);
                     
+                    ''' + annealing_schedule.get_cl_function(nmr_iterations).get_cl_function_name() + '''(
+                        temperature, i, ((_simulated_annealing_data*)sa_data)->annealing_schedule_data);
+                        
                     if(get_local_id(0) == 0){
                         if(*current_fval < *best_fval){
                             *best_fval = *current_fval;
@@ -62,9 +70,7 @@ class SimulatedAnnealing(SimpleCLLibrary):
                             }
                         }
                     }
-                    
-                    ''' + annealing_schedule.get_cl_function(nmr_iterations).get_cl_function_name() + '''(
-                        temperature, i, ((_simulated_annealing_data*)sa_data)->annealing_schedule_data);
+                    barrier(CLK_LOCAL_MEM_FENCE);
                 }
                 
                 if(get_local_id(0) == 0){
@@ -76,8 +82,11 @@ class SimulatedAnnealing(SimpleCLLibrary):
                 
                 return 0;                         
             }
-        ''', dependencies=[eval_func, state_update_func.get_cl_function(eval_func, nmr_parameters),
-                           self._annealing_schedule.get_cl_function(nmr_iterations)])
+        ''', dependencies=[eval_func,
+                           self._state_update_func.get_cl_function(eval_func, nmr_parameters),
+                           self._state_update_func.get_init_function(eval_func, nmr_parameters),
+                           self._annealing_schedule.get_cl_function(nmr_iterations),
+                           self._annealing_schedule.get_init_function(nmr_iterations)])
 
     def get_kernel_data(self):
         return {'sa_data': Struct({
@@ -115,11 +124,34 @@ def get_annealing_schedule(method_name):
     """
     if method_name == 'Linear':
         return Linear
+    if method_name == 'Exponential':
+        return Exponential
     raise ValueError('The annealing schedule with the name "{}" could not be found.'.format(method_name))
 
 
 class StateUpdateFunc:
     """Information class for the state update functions."""
+
+    def get_init_function(self, eval_func, nmr_parameters):
+        """Get the CL function to initialize this state update method.
+
+        Args:
+            eval_func (mot.lib.cl_function.CLFunction): the evaluation function
+            nmr_parameters (int): the number of parameters in the model
+
+        Returns:
+            mot.lib.cl_function.CLFunction: the CL function for the initialization. Should have signature:
+
+            .. code-block:: c
+
+                void <name>(
+                    mot_float_type* x,
+                    double* current_fval,
+                    double temperature,
+                    void* state_update_data,
+                    void* data);
+        """
+        raise NotImplementedError()
 
     def get_cl_function(self, eval_func, nmr_parameters):
         """Get the CL function for updating the parameter state.
@@ -129,7 +161,17 @@ class StateUpdateFunc:
             nmr_parameters (int): the number of parameters in the model
 
         Returns:
-            mot.lib.cl_function.CLFunction: the CL function for updating the state
+            mot.lib.cl_function.CLFunction: the CL function for updating the state. Should have signature:
+
+            .. code-block:: c
+
+                void <name>(
+                    mot_float_type* x,
+                    double* current_fval,
+                    ulong iteration,
+                    double temperature,
+                    void* state_update_data,
+                    void* data);
         """
         raise NotImplementedError()
 
@@ -148,6 +190,21 @@ class StateUpdateFunc:
 class AnnealingSchedule:
     """Information class for the annealing schedule functions."""
 
+    def get_init_function(self, nmr_iterations):
+        """Get the CL function to initialize this annealing schedule.
+
+        Args:
+            nmr_iterations (int): the number of iterations in the annealing process
+
+        Returns:
+            mot.lib.cl_function.CLFunction: the CL function for the initialization. Should have signature:
+
+            .. code-block:: c
+
+                void <name>(double* temperature, void* annealing_schedule_data);
+        """
+        raise NotImplementedError()
+
     def get_cl_function(self, nmr_iterations):
         """Get the CL function for updating the temperature.
 
@@ -155,7 +212,11 @@ class AnnealingSchedule:
             nmr_iterations (int): the number of iterations in the annealing process
 
         Returns:
-            mot.lib.cl_function.CLFunction: the CL function for updating the temperature
+            mot.lib.cl_function.CLFunction: the CL function for updating the temperature. Should have signature:
+
+            .. code-block:: c
+
+                void <name>(double* temperature, ulong iteration, void* annealing_schedule_data);
         """
         raise NotImplementedError()
 
@@ -164,17 +225,6 @@ class AnnealingSchedule:
 
         Returns:
             mot.lib.kernel_data.Struct: the structure with the kernel data for this annealing schedule function
-        """
-        raise NotImplementedError()
-
-    def get_starting_temperature(self, nmr_iterations):
-        """Get the starting temperature for this annealing schedule.
-
-        Args:
-            nmr_iterations (int): the number of iterations in the annealing process
-
-        Returns:
-            float: the starting temperature
         """
         raise NotImplementedError()
 
@@ -193,6 +243,28 @@ class AMWG:
         self._damping_factor = 1
         self._min_val = 1e-15
         self._max_val = 1e3
+
+    def get_init_function(self, eval_func, nmr_parameters):
+        return SimpleCLFunction.from_string('''
+             void _AMWG_state_update_function_init(
+                    mot_float_type* x,
+                    double* current_fval,
+                    double temperature,
+                    void* state_update_data,
+                    void* data){
+
+                mot_float_type* proposal_stds = ((_AMWG_state_update_data*)state_update_data)->proposal_stds;
+                mot_float_type* acceptance_counter = ((_AMWG_state_update_data*)state_update_data)->acceptance_counter;
+
+                if(get_local_id(0) == 0){
+                    for(uint k = 0; k < ''' + str(nmr_parameters) + '''; k++){
+                        proposal_stds[k] = 1;
+                        acceptance_counter[k] = 0;
+                    }
+                }
+                barrier(CLK_LOCAL_MEM_FENCE);
+            }
+        ''')
 
     def get_cl_function(self, eval_func, nmr_parameters):
         update_proposal_state = SimpleCLFunction.from_string('''
@@ -238,18 +310,7 @@ class AMWG:
                 bool is_first_work_item = get_local_id(0) == 0;
                 
                 mot_float_type* proposal_stds = ((_AMWG_state_update_data*)state_update_data)->proposal_stds;
-                mot_float_type* acceptance_counter = ((_AMWG_state_update_data*)state_update_data)->acceptance_counter;
-                
-                if(is_first_work_item){
-                    if(iteration == 0){
-                        for(uint k = 0; k < ''' + str(nmr_parameters) + '''; k++){
-                            proposal_stds[k] = 1;
-                            acceptance_counter[k] = 0;
-                        }
-                    }
-                }
-                barrier(CLK_LOCAL_MEM_FENCE);
-                
+                mot_float_type* acceptance_counter = ((_AMWG_state_update_data*)state_update_data)->acceptance_counter;                
                 double tmp;
                 mot_float_type new_fval;
             
@@ -290,31 +351,83 @@ class AMWG:
 
 class Linear(AnnealingSchedule):
 
-    def __init__(self, starting_temperature=10):
+    def __init__(self, starting_temperature=10, reduction_factor=0.01, min_temp=0.01):
         """Simple linear annealing schedule.
 
-        This will linearly decrease with each iteration, such that at the end of all iterations the starting temperature
-        is near one. That is, this method follows the rule :math:`t_i = t_0 - (t_0 / it_{max}) * i`, where
-        :math:`t_{i}` is the temperature at iteration :math:`i`, :math:`it_{max}` is the maximum number of iterations
-        and :math:`i` is the current number of iterations.
+        This will linearly decrease with each iteration, stopping reduction at a certain minimum.
+
+        At every iteration, the temperature :math:`t_i` at time i, is set to
+        :math:`t_i = max(t_{i-1} - \eta * i, t_{min})`
 
         Args:
             starting_temperature (float): the starting temperature
+            reduction_factor (float): the linear reduction factor
+            min_temp (float): the minimum allowed temperature
         """
         self._starting_temperature = starting_temperature
+        self._reduction_factor = reduction_factor
+        self._min_temp = min_temp
+
+    def get_init_function(self, nmr_iterations):
+        return SimpleCLFunction.from_string('''
+            void _Linear_annealing_schedule_init(double* temperature, void* annealing_schedule_data){
+                if(get_local_id(0) == 0){
+                    *temperature = ''' + str(self._starting_temperature) + ''';
+                }
+                barrier(CLK_LOCAL_MEM_FENCE);
+            }        
+        ''')
 
     def get_cl_function(self, nmr_iterations):
         return SimpleCLFunction.from_string('''
             void _Linear_annealing_schedule(double* temperature, ulong iteration, void* annealing_schedule_data){
-                ulong starting_temperature = ''' + str(self._starting_temperature) + ''';
-                ulong nmr_iterations = ''' + str(nmr_iterations) + ''';
-                
-                *temperature = starting_temperature - (starting_temperature / nmr_iterations) * iteration;
+                if(get_local_id(0) == 0){
+                    *temperature -= ''' + str(self._reduction_factor) + ''' * iteration;
+                    *temperature = max(*temperature, ''' + str(self._min_temp) + ''');
+                }
+                barrier(CLK_LOCAL_MEM_FENCE);
             }        
         ''')
 
-    def get_starting_temperature(self, nmr_iterations):
-        return self._starting_temperature
+    def get_kernel_data(self):
+        return Struct({}, '_linear_annealing_schedule_data')
+
+
+class Exponential(AnnealingSchedule):
+
+    def __init__(self, starting_temperature=10, reduction_factor=0.99):
+        """Simple linear annealing schedule.
+
+        This will exponentially decrease with each iteration. That is, this method follows the
+        rule :math:`t_i = t_0 \alpha^i`, where :math:`t_{i}` is the temperature at iteration :math:`i`,
+        :math:`\alpha` is the reduction factor and :math:`i` is the current number of iterations.
+
+        Args:
+            starting_temperature (float): the starting temperature
+            reduction_factor (float): the exponential reduction factor
+        """
+        self._starting_temperature = starting_temperature
+        self._reduction_factor = reduction_factor
+
+    def get_init_function(self, nmr_iterations):
+        return SimpleCLFunction.from_string('''
+            void _Exponential_annealing_schedule_init(double* temperature, void* annealing_schedule_data){
+                if(get_local_id(0) == 0){
+                    *temperature = ''' + str(self._starting_temperature) + ''';
+                }
+                barrier(CLK_LOCAL_MEM_FENCE);
+            }        
+        ''')
+
+    def get_cl_function(self, nmr_iterations):
+        return SimpleCLFunction.from_string('''
+            void _Exponential_annealing_schedule(double* temperature, ulong iteration, void* annealing_schedule_data){
+                if(get_local_id(0) == 0){
+                    *temperature *= ''' + str(self._reduction_factor) + ''';
+                }
+                barrier(CLK_LOCAL_MEM_FENCE);
+            }        
+        ''')
 
     def get_kernel_data(self):
         return Struct({}, '_linear_annealing_schedule_data')
