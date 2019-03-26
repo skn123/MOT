@@ -35,7 +35,7 @@
 double %(FUNCTION_NAME)s(mot_float_type* x, void* data_void);
 
 // We define the header now and import the body later after having defined the subspace evaluation function
-int lib_nmsimplex(
+int nmsimplex(
         int nmr_parameters,
         mot_float_type* const model_parameters,
         void* data,
@@ -121,7 +121,7 @@ void _subplex_sort_indices(const mot_float_type* const values, int* indices, int
  *  the l1norm
  */
 mot_float_type _subplex_l1norm_subset(const mot_float_type* const values,
-                                     const int* const indices, int start, int end){
+                                      const int* const indices, int start, int end){
     mot_float_type l1norm = 0;
     for(int i = start; i < end; i++){
         l1norm += fabs(values[indices[i]]);
@@ -207,7 +207,7 @@ void _subplex_get_subspaces(const mot_float_type* const delta_x,
 
     while(total_subspace_length != nmr_parameters){
         next_length = _subplex_find_next_subspace_length(delta_x, x_indices, nmr_parameters, min_subspace_length,
-                                                        max_subspace_length, total_subspace_length);
+                                                         max_subspace_length, total_subspace_length);
         total_subspace_length += next_length;
         subspace_dimensions[*nmr_subspaces] = next_length;
         (*nmr_subspaces)++;
@@ -269,7 +269,7 @@ int subplex_minimize(mot_float_type* model_parameters, /* in: initial guess, out
         if(get_local_id(0) == 0){
             // first use delta_x to create the subspaces
             _subplex_get_subspaces(delta_x, x_indices, subspace_dimensions, nmr_subspaces, %(NMR_PARAMS)r,
-                                  MIN_SUBSPACE_LENGTH, MAX_SUBSPACE_LENGTH);
+                                   MIN_SUBSPACE_LENGTH, MAX_SUBSPACE_LENGTH);
 
 
             // then use delta_x as a temporary container for the current parameters
@@ -305,9 +305,9 @@ int subplex_minimize(mot_float_type* model_parameters, /* in: initial guess, out
                 delta = 1 - 1.0 / subspace_dimensions[i];
             }
 
-            lib_nmsimplex(subspace_dimensions[i], subspace_model_parameters, (void*)&subspace_data, subspace_xstep,
-                          &fdiff, PSI, %(PATIENCE_NMSIMPLEX)r * (subspace_dimensions[i] + 1),
-                          alpha, beta, gamma, delta, nms_scratch);
+            nmsimplex(subspace_dimensions[i], subspace_model_parameters, (void*)&subspace_data, subspace_xstep,
+                      &fdiff, PSI, %(PATIENCE_NMSIMPLEX)r * (subspace_dimensions[i] + 1),
+                      alpha, beta, gamma, delta, nms_scratch);
 
             if(get_local_id(0) == 0){
                 // add the optimized subspace parameters to the current optimal set of model_parameters

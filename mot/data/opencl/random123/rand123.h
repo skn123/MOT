@@ -34,7 +34,9 @@ uint4 rand123_generate_bits(){
 
     if (++__rng_state[gid + 0] == 0){
         if (++__rng_state[gid + 1] == 0){
-            ++__rng_state[gid + 2];
+            if (++__rng_state[gid + 2] == 0){
+                ++__rng_state[gid + 3];
+            }
         }
     }
 

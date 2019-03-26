@@ -87,22 +87,6 @@ class LogCosh(SimpleCLLibrary):
         ''')
 
 
-class EuclidianNormFunction(SimpleCLLibraryFromFile):
-    def __init__(self, memspace='private', memtype='mot_float_type'):
-        """A CL functions for calculating the Euclidian distance between n values.
-
-        Args:
-            memspace (str): The memory space of the memtyped array (private, constant, global).
-            memtype (str): the memory type to use, double, float, mot_float_type, ...
-        """
-        super().__init__(
-            memtype,
-            self.__class__.__name__ + '_' + memspace + '_' + memtype,
-            [],
-            resource_filename('mot', 'data/opencl/euclidian_norm.cl'),
-            var_replace_dict={'MEMSPACE': memspace, 'MEMTYPE': memtype})
-
-
 class simpsons_rule(SimpleCLLibrary):
 
     def __init__(self, function_name):
@@ -424,8 +408,8 @@ class LibNMSimplex(SimpleCLLibraryFromFile):
         }
 
         super().__init__(
-            'int', 'lib_nmsimplex', [],
-            resource_filename('mot', 'data/opencl/lib_nmsimplex.cl'),
+            'int', 'nmsimplex', [],
+            resource_filename('mot', 'data/opencl/nmsimplex.cl'),
             var_replace_dict=params)
 
 
@@ -459,9 +443,9 @@ class NMSimplex(SimpleCLLibrary):
             )
 
         super().__init__('''
-            int nmsimplex(mot_float_type* model_parameters, void* data, 
-                          mot_float_type* initial_simplex_scale, 
-                          mot_float_type* nmsimplex_scratch){
+            int apply_nmsimplex(mot_float_type* model_parameters, void* data, 
+                                mot_float_type* initial_simplex_scale, 
+                                mot_float_type* nmsimplex_scratch){
 
                 if(get_local_id(0) == 0){
                     %(INITIAL_SIMPLEX_SCALES)s
@@ -471,10 +455,10 @@ class NMSimplex(SimpleCLLibrary):
                 mot_float_type fdiff;
                 mot_float_type psi = 0;
 
-                return lib_nmsimplex(%(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
-                                     &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),
-                                     %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
-                                     nmsimplex_scratch);
+                return nmsimplex(%(NMR_PARAMS)r, model_parameters, data, initial_simplex_scale,
+                                 &fdiff, psi, (int)(%(PATIENCE)r * (%(NMR_PARAMS)r+1)),
+                                 %(ALPHA)r, %(BETA)r, %(GAMMA)r, %(DELTA)r,
+                                 nmsimplex_scratch);
             }
         ''' % params, **kwargs)
 
@@ -580,6 +564,7 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
         super().__init__(
             'int', 'lmmin', ['mot_float_type* const model_parameters',
                              'void* data',
+                             'mot_float_type* fjac',
                              'mot_float_type* scratch_mot_float_type',
                              'int* scratch_int'],
             resource_filename('mot', 'data/opencl/lmmin.cl'),
@@ -591,7 +576,6 @@ class LevenbergMarquardt(SimpleCLLibraryFromFile):
             'scratch_mot_float_type': LocalMemory(
                 'mot_float_type', 8 +
                                   2 * self._var_replace_dict['NMR_OBSERVATIONS'] +
-                                  5 * self._var_replace_dict['NMR_PARAMS'] +
-                                  self._var_replace_dict['NMR_PARAMS'] * self._var_replace_dict['NMR_OBSERVATIONS']),
+                                  5 * self._var_replace_dict['NMR_PARAMS']),
             'scratch_int': LocalMemory('int', self._var_replace_dict['NMR_PARAMS'])
         }

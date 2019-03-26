@@ -1,6 +1,6 @@
 from mot.lib.cl_function import SimpleCLFunction
 from mot.configuration import CLRuntimeInfo
-from mot.lib.kernel_data import Array, Scalar, CompositeArray, Struct, LocalMemory
+from mot.lib.kernel_data import Array, Scalar, CompositeArray, Struct, LocalMemory, Zeros
 from mot.lib.utils import all_elements_equal, get_single_value
 from mot.library_functions import Powell, Subplex, NMSimplex, LevenbergMarquardt, SimulatedAnnealing
 from mot.library_functions.simulated_annealing import get_state_update_func, get_annealing_schedule
@@ -591,6 +591,7 @@ def _minimize_levenberg_marquardt(func, x0, nmr_observations, cl_runtime_info, l
                                         **_clean_options('Levenberg-Marquardt', options))
 
     kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
+                   'fjac': Zeros((nmr_problems, nmr_parameters, nmr_observations), ctype='mot_float_type', mode='rw'),
                    'data': Struct({'data': data,
                                    'lower_bounds': lower_bounds,
                                    'upper_bounds': upper_bounds,

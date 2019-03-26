@@ -1,5 +1,5 @@
-#ifndef LIB_NMSIMPLEX_CL
-#define LIB_NMSIMPLEX_CL
+#ifndef NMSIMPLEX_CL
+#define NMSIMPLEX_CL
 
 /**
  * Author = Robbert Harms
@@ -367,7 +367,7 @@ bool _libnms_simplex_contract(
 }
 
 /**
- * The library function for performing Nelder-Mead simplex optimization
+ * Nelder-Mead simplex optimization.
  *
  *
  * Args:
@@ -384,7 +384,7 @@ bool _libnms_simplex_contract(
  * - alpha, beta, gamma, delta: simplex strategy.
  * - scratch: the scratch array containing the memory we can use for the operations, of size [nmr_parameters * 3 + (nmr_parameters + 1)^2]
  */
-int lib_nmsimplex(
+int nmsimplex(
         int nmr_parameters,
         mot_float_type* const model_parameters,
         void* data,
@@ -527,4 +527,4 @@ int lib_nmsimplex(
 
 #undef USER_TOL_X
 
-#endif // LIB_NMSIMPLEX_CL
+#endif // NMSIMPLEX_CL

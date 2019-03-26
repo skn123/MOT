@@ -121,7 +121,7 @@ double lm_euclidian_norm(const mot_float_type* const x, const int n);
 /******************************************************************************/
 /*  lmmin (main minimization routine)                                         */
 /******************************************************************************/
-int lmmin(mot_float_type * const model_parameters, void* data,
+int lmmin(mot_float_type * const model_parameters, void* data, mot_float_type* fjac,
           mot_float_type* scratch_mot_float_type, int* scratch_int){
 
     int j, i;
@@ -150,7 +150,6 @@ int lmmin(mot_float_type * const model_parameters, void* data,
     mot_float_type* wa1 = scratch_ind;   scratch_ind += %(NMR_PARAMS)s;
     mot_float_type* wa2 = scratch_ind;   scratch_ind += %(NMR_PARAMS)s;
     mot_float_type* wa3 = scratch_ind;   scratch_ind += %(NMR_PARAMS)s;
-    mot_float_type* fjac = scratch_ind;  scratch_ind += %(NMR_PARAMS)s * %(NMR_OBSERVATIONS)s;
 
     int* Pivot = scratch_int;
 
