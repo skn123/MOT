@@ -45,7 +45,7 @@ class AdaptiveMetropolisWithinGibbs(AbstractRWMSampler):
         self._damping_factor = damping_factor
         self._min_val = min_val
         self._max_val = max_val
-        self._acceptance_counter = np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint64, order='C')
+        self._acceptance_counter = np.zeros((self._nmr_problems, self._nmr_params), dtype=np.uint32, order='C')
 
     def _get_mcmc_method_kernel_data_elements(self):
         kernel_data = super()._get_mcmc_method_kernel_data_elements()

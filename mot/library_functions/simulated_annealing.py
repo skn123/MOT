@@ -254,7 +254,7 @@ class AMWG:
                     void* data){
 
                 mot_float_type* proposal_stds = ((_AMWG_state_update_data*)state_update_data)->proposal_stds;
-                mot_float_type* acceptance_counter = ((_AMWG_state_update_data*)state_update_data)->acceptance_counter;
+                uint* acceptance_counter = ((_AMWG_state_update_data*)state_update_data)->acceptance_counter;
 
                 if(get_local_id(0) == 0){
                     for(uint k = 0; k < ''' + str(nmr_parameters) + '''; k++){
@@ -272,7 +272,7 @@ class AMWG:
                     mot_float_type* x, 
                     ulong current_iteration, 
                     mot_float_type* proposal_stds,
-                    mot_float_type* acceptance_counter){
+                    uint* acceptance_counter){
                 
                 if(current_iteration > 0 && current_iteration % ''' + str(self._batch_size) + ''' == 0){
                     mot_float_type delta = sqrt(1.0/
@@ -310,7 +310,7 @@ class AMWG:
                 bool is_first_work_item = get_local_id(0) == 0;
                 
                 mot_float_type* proposal_stds = ((_AMWG_state_update_data*)state_update_data)->proposal_stds;
-                mot_float_type* acceptance_counter = ((_AMWG_state_update_data*)state_update_data)->acceptance_counter;                
+                uint* acceptance_counter = ((_AMWG_state_update_data*)state_update_data)->acceptance_counter;                
                 double tmp;
                 mot_float_type new_fval;
             
@@ -345,7 +345,7 @@ class AMWG:
     def get_kernel_data(self, nmr_parameters):
         return Struct({
             'proposal_stds': LocalMemory('mot_float_type', nmr_parameters),
-            'acceptance_counter': LocalMemory('mot_float_type', nmr_parameters)},
+            'acceptance_counter': LocalMemory('uint', nmr_parameters)},
             '_AMWG_state_update_data')
 
 
