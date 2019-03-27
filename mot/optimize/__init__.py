@@ -220,8 +220,8 @@ def get_minimizer_options(method):
                 'max_subspace_length': 'auto'}
 
     elif method == 'SimulatedAnnealing':
-        return {'patience': 100,
-                'state_update_func': 'AMWG',
+        return {'patience': 10,
+                'state_update_func': 'Fast',
                 'annealing_schedule': 'Exponential'}
 
     raise ValueError('Could not find the specified method "{}".'.format(method))
@@ -323,32 +323,33 @@ def _minimize_simulated_annealing(func, x0, cl_runtime_info, lower_bounds, upper
     nmr_problems = x0.shape[0]
     nmr_parameters = x0.shape[1]
 
-    penalty_data, penalty_func = _get_penalty_function(nmr_parameters, constraints_func)
+    eval_dependencies = [func]
+    eval_data = {'data': data}
+    constraints_code = ''
+
+    if constraints_func and constraints_func.get_nmr_constraints() > 0:
+        nmr_constraints = constraints_func.get_nmr_constraints()
+        eval_dependencies.append(constraints_func)
+        eval_data['constraints'] = LocalMemory('mot_float_type', nmr_constraints)
+
+        constraints_code = '''
+            mot_float_type* constraints = ((_sa_eval_func_data*)data)->constraints;
+
+            ''' + constraints_func.get_cl_function_name() + '''(x, data, constraints);
+
+            for(int i = 0; i < ''' + str(nmr_constraints) + '''; i++){
+                if(constraints[i] > 0){
+                    return INFINITY;
+                } 
+            }
+        '''
 
     eval_func = SimpleCLFunction.from_string('''
         double evaluate(mot_float_type* x, void* data){
-            double penalty = _mle_penalty(
-                x, 
-                ((_sa_eval_func_data*)data)->data,
-                ((_sa_eval_func_data*)data)->lower_bounds,
-                ((_sa_eval_func_data*)data)->upper_bounds,
-                1,
-                ((_sa_eval_func_data*)data)->penalty_data
-            );
-            
-            if(penalty > 0){
-                return INFINITY;
-            }
-            
-            double func_val = ''' + func.get_cl_function_name() + '''(x, ((_sa_eval_func_data*)data)->data, 0);
-            
-            if(isnan(func_val)){
-                return INFINITY;
-            }
-            
-            return func_val;
+            ''' + constraints_code + '''
+            return ''' + func.get_cl_function_name() + '''(x, ((_sa_eval_func_data*)data)->data, 0);
         }
-    ''', dependencies=[func, penalty_func])
+    ''', dependencies=eval_dependencies)
 
     state_update_func = get_state_update_func(options['state_update_func'])()
     annealing_schedule = get_annealing_schedule(options['annealing_schedule'])()
@@ -357,10 +358,9 @@ def _minimize_simulated_annealing(func, x0, cl_runtime_info, lower_bounds, upper
                                         state_update_func=state_update_func, annealing_schedule=annealing_schedule)
 
     kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
-                   'data': Struct({'data': data,
-                                   'lower_bounds': lower_bounds,
-                                   'upper_bounds': upper_bounds,
-                                   'penalty_data': penalty_data}, '_sa_eval_func_data')}
+                   'lower_bounds': lower_bounds,
+                   'upper_bounds': upper_bounds,
+                   'data': Struct(eval_data, '_sa_eval_func_data')}
     kernel_data.update(optimizer_func.get_kernel_data())
 
     return_code = optimizer_func.evaluate(
