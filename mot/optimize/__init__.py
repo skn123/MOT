@@ -2,8 +2,7 @@ from mot.lib.cl_function import SimpleCLFunction
 from mot.configuration import CLRuntimeInfo
 from mot.lib.kernel_data import Array, Scalar, CompositeArray, Struct, LocalMemory, Zeros
 from mot.lib.utils import all_elements_equal, get_single_value
-from mot.library_functions import Powell, Subplex, NMSimplex, LevenbergMarquardt, SimulatedAnnealing
-from mot.library_functions.simulated_annealing import get_state_update_func, get_annealing_schedule
+from mot.library_functions import Powell, Subplex, NMSimplex, LevenbergMarquardt
 from mot.optimize.base import OptimizeResults
 import numpy as np
 
@@ -118,10 +117,6 @@ def minimize(func, x0, data=None, method=None, lower_bounds=None, upper_bounds=N
         return _minimize_subplex(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
                                  constraints_func=constraints_func, data=data, options=options)
 
-    elif method == 'SimulatedAnnealing':
-        return _minimize_simulated_annealing(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
-                                             constraints_func=constraints_func, data=data, options=options)
-
     raise ValueError('Could not find the specified method "{}".'.format(method))
 
 
@@ -219,11 +214,6 @@ def get_minimizer_options(method):
                 'min_subspace_length': 'auto',
                 'max_subspace_length': 'auto'}
 
-    elif method == 'SimulatedAnnealing':
-        return {'patience': 10,
-                'state_update_func': 'Fast',
-                'annealing_schedule': 'Exponential'}
-
     raise ValueError('Could not find the specified method "{}".'.format(method))
 
 
@@ -302,72 +292,6 @@ def _minimize_powell(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
         kernel_data, nmr_problems,
         use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
         cl_runtime_info=cl_runtime_info)
-
-    return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
-                            'status': return_code})
-
-
-def _minimize_simulated_annealing(func, x0, cl_runtime_info, lower_bounds, upper_bounds,
-                                  constraints_func=None, data=None, options=None):
-    """Uses simulated annealing to find the minimum point.
-
-    The bounds and other constraints are enforced using an infinity penalty. That is, if the bounds are crossed
-    we return minus infinity.
-
-    Options:
-        patience (int): Used to set the maximum number of iterations to patience*(number_of_parameters+1)
-        state_update_func (str): the state update function we will use, defaults to the AMWG method
-        annealing_schedule (str): the annealing schedule, defaults to Linear annealing.
-    """
-    options = _clean_options('SimulatedAnnealing', options or {})
-    nmr_problems = x0.shape[0]
-    nmr_parameters = x0.shape[1]
-
-    eval_dependencies = [func]
-    eval_data = {'data': data}
-    constraints_code = ''
-
-    if constraints_func and constraints_func.get_nmr_constraints() > 0:
-        nmr_constraints = constraints_func.get_nmr_constraints()
-        eval_dependencies.append(constraints_func)
-        eval_data['constraints'] = LocalMemory('mot_float_type', nmr_constraints)
-
-        constraints_code = '''
-            mot_float_type* constraints = ((_sa_eval_func_data*)data)->constraints;
-
-            ''' + constraints_func.get_cl_function_name() + '''(x, data, constraints);
-
-            for(int i = 0; i < ''' + str(nmr_constraints) + '''; i++){
-                if(constraints[i] > 0){
-                    return INFINITY;
-                } 
-            }
-        '''
-
-    eval_func = SimpleCLFunction.from_string('''
-        double evaluate(mot_float_type* x, void* data){
-            ''' + constraints_code + '''
-            return ''' + func.get_cl_function_name() + '''(x, ((_sa_eval_func_data*)data)->data, 0);
-        }
-    ''', dependencies=eval_dependencies)
-
-    state_update_func = get_state_update_func(options['state_update_func'])()
-    annealing_schedule = get_annealing_schedule(options['annealing_schedule'])()
-
-    optimizer_func = SimulatedAnnealing(eval_func, nmr_parameters, patience=options['patience'],
-                                        state_update_func=state_update_func, annealing_schedule=annealing_schedule)
-
-    kernel_data = {'model_parameters': Array(x0, ctype='mot_float_type', mode='rw'),
-                   'lower_bounds': lower_bounds,
-                   'upper_bounds': upper_bounds,
-                   'data': Struct(eval_data, '_sa_eval_func_data')}
-    kernel_data.update(optimizer_func.get_kernel_data())
-
-    return_code = optimizer_func.evaluate(
-        kernel_data, nmr_problems,
-        use_local_reduction=all(env.is_gpu for env in cl_runtime_info.cl_environments),
-        cl_runtime_info=cl_runtime_info,
-        enable_rng=True)
 
     return OptimizeResults({'x': kernel_data['model_parameters'].get_data(),
                             'status': return_code})

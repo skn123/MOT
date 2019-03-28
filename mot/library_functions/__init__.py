@@ -11,7 +11,6 @@ from mot.library_functions.continuous_distributions.gamma import gamma_pdf, gamm
 from mot.library_functions.error_functions import dawson, CerfImWOfX, erfi
 from mot.library_functions.legendre_polynomial import FirstLegendreTerm, LegendreTerms, \
     EvenLegendreTerms, OddLegendreTerms
-from mot.library_functions.simulated_annealing import SimulatedAnnealing
 
 __author__ = 'Robbert Harms'
 __date__ = '2018-05-07'
