@@ -770,7 +770,7 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
         tuple: Struct and SimpleCLFunction, the required data for the penalty function and the penalty function itself.
     """
     dependencies = []
-    data_requirements = {'scratch': LocalMemory('double', 1)}
+    data_requirements = {}
     constraints_code = ''
 
     if constraints_func and constraints_func.get_nmr_constraints() > 0:
@@ -784,7 +784,7 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
             ''' + constraints_func.get_cl_function_name() + '''(x, data, constraints);
             
             for(int i = 0; i < ''' + str(nmr_constraints) + '''; i++){
-                *penalty_sum += pown(max((mot_float_type)0, constraints[i]), 2); 
+                penalty_sum += pown(max((mot_float_type)0, constraints[i]), 2); 
             }
         '''
 
@@ -798,27 +798,27 @@ def _get_penalty_function(nmr_parameters, constraints_func=None):
                 float penalty_weight,
                 void* scratch_data){
             
-            double* penalty_sum = ((_mle_penalty_data*)scratch_data)->scratch;
+            double penalty_sum = 0;
             
             if(get_local_id(0) == 0){
-                *penalty_sum = 0;
-                
                 // boundary conditions
                 for(int i = 0; i < ''' + str(nmr_parameters) + '''; i++){
                     if(isfinite(upper_bounds[i])){
-                        *penalty_sum += pown(max((mot_float_type)0, x[i] - upper_bounds[i]), 2);    
+                        penalty_sum += pown(max((mot_float_type)0, x[i] - upper_bounds[i]), 2);    
                     }
                     if(isfinite(lower_bounds[i])){
-                        *penalty_sum += pown(max((mot_float_type)0, lower_bounds[i] - x[i]), 2);
+                        penalty_sum += pown(max((mot_float_type)0, lower_bounds[i] - x[i]), 2);
                     }
                 }
             }
             barrier(CLK_LOCAL_MEM_FENCE);
+                        
+            penalty_sum = work_group_broadcast(penalty_sum, 0);
             
             // constraints
             ''' + constraints_code + '''
             
-            return penalty_weight * *penalty_sum;
+            return penalty_weight * penalty_sum;
         }
     ''', dependencies=dependencies)
     return data, func
