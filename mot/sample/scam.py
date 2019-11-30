@@ -72,7 +72,7 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
                                          warn_extra_copy=True),
             'parameter_variance_update_m2s': Array(self._parameter_variance_update_m2s, 'mot_float_type',
                                                    mode='rw', warn_extra_copy=True),
-            'epsilons': Array(self._epsilon, 'float', mode='r', offset_str='0')
+            'epsilons': Array(self._epsilon, 'float', mode='r', parallelize_over_first_dimension=False)
         })
         return kernel_data
 
@@ -89,9 +89,9 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
              */
             void _update_chain_statistics(ulong current_iteration,
                                           const mot_float_type new_param_value,
-                                          mot_float_type* const parameter_mean,
-                                          mot_float_type* const parameter_variance,
-                                          mot_float_type* const parameter_variance_update_m2){
+                                          global mot_float_type* const parameter_mean,
+                                          global mot_float_type* const parameter_variance,
+                                          global mot_float_type* const parameter_variance_update_m2){
 
                 mot_float_type previous_mean = *parameter_mean;
                 *parameter_mean += (new_param_value - *parameter_mean) / (current_iteration + 1);
@@ -104,7 +104,7 @@ class SingleComponentAdaptiveMetropolis(AbstractRWMSampler):
             }
             
             void _updateProposalState(_mcmc_method_data* method_data, ulong current_iteration, 
-                                      mot_float_type* current_position){    
+                                      global mot_float_type* current_position){    
                 for(uint k = 0; k < ''' + str(self._nmr_params) + '''; k++){
                     _update_chain_statistics(current_iteration, current_position[k],
                                              method_data->parameter_means + k, 

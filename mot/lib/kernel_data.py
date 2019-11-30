@@ -15,6 +15,21 @@ __licence__ = 'LGPL v3'
 
 class KernelData:
 
+    def get_subset(self, problem_indices):
+        """Get a subset of this kernel data over problem instances.
+
+        This can be used to get a subset of a kernel data object such that only a subset of the problem instances
+        can be processed.
+
+        Args:
+            problem_indices (Iterable or None): list of problem instances we would like to have in the subset.
+                May return ``self``. If problem_indices evaluates to None, this should return ``self``.
+
+        Returns:
+            KernelData: a kernel data object of the same type as the current kernel data object.
+        """
+        raise NotImplementedError()
+
     def set_mot_float_dtype(self, mot_float_dtype):
         """Set the numpy data type corresponding to the ``mot_float_type`` ctype.
 
@@ -219,6 +234,12 @@ class Struct(KernelData):
         self._ctype = ctype
         self._anonymous = anonymous
 
+    def get_subset(self, problem_indices):
+        if problem_indices is None:
+            return self
+        sub_elements = OrderedDict([(k, v.get_subset(problem_indices)) for k, v in self._elements.items()])
+        return Struct(sub_elements, self._ctype, anonymous=self._anonymous)
+
     def set_mot_float_dtype(self, mot_float_dtype):
         for element in self._elements.values():
             element.set_mot_float_dtype(mot_float_dtype)
@@ -361,6 +382,9 @@ class Scalar(KernelData):
         self._ctype = ctype or dtype_to_ctype(self._value.dtype)
         self._mot_float_dtype = None
 
+    def get_subset(self, problem_indices):
+        return self
+
     def get_data(self):
         if self._ctype.startswith('mot_float_type'):
             return np.asscalar(self._value.astype(self._mot_float_dtype))
@@ -442,6 +466,9 @@ class PrivateMemory(KernelData):
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
 
+    def get_subset(self, problem_indices):
+        return self
+
     def get_data(self):
         return None
 
@@ -510,6 +537,9 @@ class LocalMemory(KernelData):
         else:
             self._size_func = nmr_items
 
+    def get_subset(self, problem_indices):
+        return self
+
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
 
@@ -559,7 +589,8 @@ class LocalMemory(KernelData):
 
 class Array(KernelData):
 
-    def __init__(self, data, ctype=None, mode='r', offset_str=None, warn_extra_copy=False, as_scalar=False):
+    def __init__(self, data, ctype=None, mode='r', warn_extra_copy=False, as_scalar=False,
+                 parallelize_over_first_dimension=True):
         """Loads the given array as a buffer into the kernel.
 
         By default, this will try to offset the data in the kernel by the stride of the first dimension multiplied
@@ -576,14 +607,17 @@ class Array(KernelData):
                 If None it is implied from the provided data.
             mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
                 mode of how the data is loaded into the compute device's memory.
-            offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
-                for no offset.
             warn_extra_copy (boolean): only used if ``is_writable`` is set to True. If set, we guarantee that the
                 return values are written to the same input array. This allows the user of this class to user their
                 reference to the underlying data, relieving the user of having to use :meth:`get_data`.
             as_scalar (boolean): if given and if the data is only a 1d, we will load the value as a scalar in the
                 data struct. As such, one does not need to evaluate as a pointer.
+            parallelize_over_first_dimension (boolean): only applicable for multi-dimensional arrays (n, m, k, ...)
+                where ``n`` is expected to correspond to problem instances. If True, we will load the data as
+                (m, k, ...) arrays for each problem instance. If False, the data will be loaded as is, and each problem
+                instance will have a reference to the complete array.
         """
+        self._mode = mode
         self._is_readable = 'r' in mode
         self._is_writable = 'w' in mode
 
@@ -595,18 +629,18 @@ class Array(KernelData):
         if ctype and not ctype.startswith('mot_float_type'):
             self._data = convert_data_to_dtype(self._data, ctype)
 
-        self._offset_str = offset_str
         self._ctype = ctype or dtype_to_ctype(self._data.dtype)
         self._mot_float_dtype = None
         self._backup_data_reference = None
         self._warn_extra_copy = warn_extra_copy
         self._data_copied = False
         self._as_scalar = as_scalar
+        self._parallelize_over_first_dimension = parallelize_over_first_dimension
 
         self._data_length = 1
         if len(self._data.shape):
             self._data_length = self._data.strides[0] // self._data.itemsize
-        if self._offset_str == '0' or self._offset_str == 0:
+        if not self._parallelize_over_first_dimension:
             self._data_length = self._data.size
 
         if self._as_scalar and len(np.squeeze(self._data).shape) > 1:
@@ -615,6 +649,15 @@ class Array(KernelData):
         if self._is_writable and self._warn_extra_copy and self._data is not data:
             raise ValueError('Zero copy was set but we had to make '
                              'a copy to guarantee the writing and ctype requirements.')
+
+    def get_subset(self, problem_indices):
+        if problem_indices is None:
+            return self
+        if not self._parallelize_over_first_dimension:
+            return self
+        return Array(self._data[problem_indices], ctype=self._ctype,
+                     mode=self._mode, warn_extra_copy=False, as_scalar=self._as_scalar,
+                     parallelize_over_first_dimension=self._parallelize_over_first_dimension)
 
     def set_mot_float_dtype(self, mot_float_dtype):
         self._mot_float_dtype = mot_float_dtype
@@ -641,7 +684,7 @@ class Array(KernelData):
         self._data_length = 1
         if len(self._data.shape):
             self._data_length = self._data.strides[0] // self._data.itemsize
-        if self._offset_str == '0' or self._offset_str == 0:
+        if not self._parallelize_over_first_dimension:
             self._data_length = self._data.size
 
     def get_data(self):
@@ -705,10 +748,10 @@ class Array(KernelData):
         return 1
 
     def _get_offset_str(self, problem_id_substitute):
-        if self._offset_str is None:
+        if self._parallelize_over_first_dimension:
             offset_str = str(self._data_length) + ' * {problem_id}'
         else:
-            offset_str = str(self._offset_str)
+            offset_str = '0'
         return offset_str.replace('{problem_id}', problem_id_substitute)
 
     def finalize(self):
@@ -718,7 +761,7 @@ class Array(KernelData):
 
 class Zeros(Array):
 
-    def __init__(self, shape, ctype, offset_str=None, mode='w'):
+    def __init__(self, shape, ctype, mode='w', parallelize_over_first_dimension=True):
         """Allocate an output buffer of the given shape.
 
         This is meant to quickly allocate a buffer large enough to hold the data requested. After running an OpenCL
@@ -726,12 +769,11 @@ class Zeros(Array):
 
         Args:
             shape (int or tuple): the shape of the output array
-            offset_str (str): the offset definition, can use ``{problem_id}`` for multiplication purposes. Set to 0
-                for no offset.
             mode (str): one of 'r', 'w' or 'rw', for respectively read, write or read and write. This sets the
                 mode of how the data is loaded into the compute device's memory.
         """
-        super().__init__(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype, offset_str=offset_str,
+        super().__init__(np.zeros(shape, dtype=ctype_to_dtype(ctype)), ctype,
+                         parallelize_over_first_dimension=parallelize_over_first_dimension,
                          mode=mode, as_scalar=False)
 
 
@@ -757,7 +799,11 @@ class CompositeArray(KernelData):
         elif self._address_space == 'local':
             self._composite_array = LocalMemory(self._ctype, len(self._elements))
         elif self._address_space == 'global':
-            self._composite_array = Zeros(len(self._elements), self._ctype, offset_str='0', mode='rw')
+            self._composite_array = Zeros(len(self._elements), self._ctype, mode='rw',
+                                          parallelize_over_first_dimension=False)
+
+    def get_subset(self, problem_indices):
+        return self
 
     def set_mot_float_dtype(self, mot_float_dtype):
         for element in self._elements:
